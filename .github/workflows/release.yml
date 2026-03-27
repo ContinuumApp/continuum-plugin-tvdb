@@ -95,7 +95,7 @@ jobs:
           generate_release_notes: true
 
       - name: Notify continuum-plugins catalog
-        if: github.ref_type == 'tag'
+        if: ${{ github.ref_type == 'tag' && secrets.CONTINUUM_PLUGINS_DISPATCH_TOKEN != '' }}
         env:
           DISPATCH_TOKEN: ${{ secrets.CONTINUUM_PLUGINS_DISPATCH_TOKEN }}
         run: |
