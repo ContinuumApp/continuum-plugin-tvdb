@@ -27,24 +27,29 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Check out Continuum plugin SDK
-        uses: actions/checkout@v6
-        with:
-          repository: ContinuumApp/continuum-plugin-sdk
-          path: continuum-plugin-sdk
-
       - uses: actions/setup-go@v6
         with:
           go-version: '1.26'
 
-      - name: Point module resolution at checked out SDK repo
-        run: go mod edit -replace=github.com/ContinuumApp/continuum-plugin-sdk=./continuum-plugin-sdk
+      - name: Configure module resolution
+        run: |
+          go env -w GOPROXY=direct
+          go env -w GOPRIVATE=github.com/ContinuumApp/*
+          go env -w GONOSUMDB=github.com/ContinuumApp/*
+
+      - name: Reject committed local SDK replaces
+        run: |
+          if grep -Eq '^replace github.com/ContinuumApp/continuum-plugin-sdk => /' go.mod; then
+            echo "go.mod contains a machine-local continuum-plugin-sdk replace."
+            exit 1
+          fi
 
       - name: Build plugin binary
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: '0'
+          GOWORK: off
         run: |
           mkdir -p dist
           binary="plugin-${GOOS}-${GOARCH}"

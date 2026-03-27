@@ -1,3 +1,5 @@
+github.com/ContinuumApp/continuum-plugin-sdk v0.1.0 h1:XaSdIHeTOrIsUuPODyflx69E+CWWX9UmvCRy+8woo94=
+github.com/ContinuumApp/continuum-plugin-sdk v0.1.0/go.mod h1:sYhMYE2FwVY5/THvEIOwVYXsCVWis5GDSTVT9dXg0H4=
 github.com/bufbuild/protocompile v0.14.1 h1:iA73zAf/fyljNjQKwYzUHD6AD4R8KMasmwa/FBatYVw=
 github.com/bufbuild/protocompile v0.14.1/go.mod h1:ppVdAIhbr2H8asPk6k4pY7t9zB1OU5DoEw9xY/FUi1c=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

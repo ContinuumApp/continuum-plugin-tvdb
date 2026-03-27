@@ -1,6 +1,3 @@
-// NOTE: Remove the local replace once github.com/ContinuumApp/continuum-plugin-sdk
-// is published and tagged.
-
 module github.com/ContinuumApp/continuum-plugin-tvdb
 
 go 1.26.0
@@ -26,5 +23,3 @@ require (
 	golang.org/x/text v0.32.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 )
-
-replace github.com/ContinuumApp/continuum-plugin-sdk => /Users/nathangray/dev/github/ContinuumApp/continuum-plugin-sdk
