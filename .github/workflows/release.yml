@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -35,24 +36,22 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: '0'
-          GOPRIVATE: github.com/ContinuumApp/*
         run: |
           mkdir -p dist
-          go build -trimpath -ldflags="-s -w" -o dist/plugin .
-
-      - name: Compute checksum
-        run: |
-          cd dist
-          sha256sum plugin > plugin.sha256
+          binary="plugin-${GOOS}-${GOARCH}"
+          go build -trimpath -ldflags="-s -w" -o "dist/${binary}" .
+          checksum=$(shasum -a 256 "dist/${binary}" | awk '{print $1}')
+          printf '%s  %s\n' "$checksum" "$binary" > dist/checksums.txt
+          sed "s/__CHECKSUM__/${checksum}/" manifest.json > "dist/manifest-${GOOS}-${GOARCH}.json"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: plugin-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
-            dist/plugin
-            dist/plugin.sha256
-            manifest.json
+            dist/plugin-${{ matrix.goos }}-${{ matrix.goarch }}
+            dist/checksums.txt
+            dist/manifest-${{ matrix.goos }}-${{ matrix.goarch }}.json
 
   release:
     needs: build
@@ -67,25 +66,21 @@ jobs:
 
       - name: Prepare release assets
         run: |
+          mkdir -p release
+          : > release/checksums.txt
           for dir in artifacts/plugin-*; do
             platform=$(basename "$dir" | sed 's/plugin-//')
-            mkdir -p "release/${platform}"
-            cp "${dir}/plugin" "release/${platform}/plugin"
-            cp "${dir}/plugin.sha256" "release/${platform}/plugin.sha256"
-            cp "${dir}/manifest.json" "release/${platform}/manifest.json"
+            cp "${dir}/plugin-${platform}" "release/plugin-${platform}"
+            cat "${dir}/checksums.txt" >> release/checksums.txt
           done
+          sort -u -o release/checksums.txt release/checksums.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            release/linux-amd64/plugin
-            release/linux-amd64/plugin.sha256
-            release/linux-amd64/manifest.json
-            release/linux-arm64/plugin
-            release/linux-arm64/plugin.sha256
-            release/linux-arm64/manifest.json
-            release/darwin-arm64/plugin
-            release/darwin-arm64/plugin.sha256
-            release/darwin-arm64/manifest.json
+            release/plugin-linux-amd64
+            release/plugin-linux-arm64
+            release/plugin-darwin-arm64
+            release/checksums.txt
           generate_release_notes: true
