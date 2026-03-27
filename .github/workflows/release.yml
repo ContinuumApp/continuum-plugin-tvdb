@@ -27,9 +27,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Check out Continuum plugin SDK
+        uses: actions/checkout@v4
+        with:
+          repository: ContinuumApp/continuum-plugin-sdk
+          path: continuum-plugin-sdk
+
       - uses: actions/setup-go@v5
         with:
           go-version: '1.26'
+
+      - name: Point module resolution at checked out SDK repo
+        run: go mod edit -replace=github.com/ContinuumApp/continuum-plugin-sdk=./continuum-plugin-sdk
 
       - name: Build plugin binary
         env:

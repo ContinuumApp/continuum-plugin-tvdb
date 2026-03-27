@@ -8,7 +8,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	pluginv1 "github.com/ContinuumApp/continuum/pkg/pluginproto/continuum/plugin/v1"
+	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
 )
 
 func TestRuntimeServerConfigure_ConfiguresTVDBProvider(t *testing.T) {
