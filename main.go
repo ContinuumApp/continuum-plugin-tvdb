@@ -1,0 +1,377 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync"
+
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
+
+	"github.com/ContinuumApp/continuum-plugin-tvdb/metadata"
+	"github.com/ContinuumApp/continuum-plugin-tvdb/models"
+	"github.com/ContinuumApp/continuum-plugin-tvdb/provider"
+	pluginv1 "github.com/ContinuumApp/continuum/pkg/pluginproto/continuum/plugin/v1"
+	publicmanifest "github.com/ContinuumApp/continuum/pkg/pluginsdk/manifest"
+	"github.com/ContinuumApp/continuum/pkg/pluginsdk/runtime"
+)
+
+type connectionConfig struct {
+	APIKey string
+	PIN    string
+}
+
+type runtimeServer struct {
+	pluginv1.UnimplementedRuntimeServer
+
+	manifest *pluginv1.PluginManifest
+
+	mu       sync.RWMutex
+	config   connectionConfig
+	provider *provider.Provider
+}
+
+type metadataServer struct {
+	pluginv1.UnimplementedMetadataProviderServer
+	runtime *runtimeServer
+}
+
+func (s *runtimeServer) GetManifest(context.Context, *pluginv1.GetManifestRequest) (*pluginv1.GetManifestResponse, error) {
+	return &pluginv1.GetManifestResponse{Manifest: s.manifest}, nil
+}
+
+func (s *runtimeServer) Configure(_ context.Context, req *pluginv1.ConfigureRequest) (*pluginv1.ConfigureResponse, error) {
+	config := connectionConfig{}
+	for _, entry := range req.GetConfig() {
+		if entry == nil || entry.GetKey() != "connection" {
+			continue
+		}
+		values := entry.GetValue().AsMap()
+		if rawAPIKey, ok := values["api_key"].(string); ok {
+			config.APIKey = strings.TrimSpace(rawAPIKey)
+		}
+		if rawPIN, ok := values["pin"].(string); ok {
+			config.PIN = strings.TrimSpace(rawPIN)
+		}
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	s.config = config
+	if config.APIKey == "" || config.PIN == "" {
+		s.provider = nil
+		return &pluginv1.ConfigureResponse{}, nil
+	}
+
+	s.provider = provider.NewProvider(config.APIKey, config.PIN)
+	return &pluginv1.ConfigureResponse{}, nil
+}
+
+func (s *runtimeServer) providerForRequest() (*provider.Provider, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if s.provider == nil {
+		return nil, status.Error(codes.FailedPrecondition, "TVDB plugin is not configured")
+	}
+	return s.provider, nil
+}
+
+func (s *metadataServer) Search(ctx context.Context, req *pluginv1.SearchMetadataRequest) (*pluginv1.SearchMetadataResponse, error) {
+	p, err := s.runtime.providerForRequest()
+	if err != nil {
+		return nil, err
+	}
+
+	results, err := p.Search(ctx, metadata.SearchQuery{
+		Title:       req.GetQuery(),
+		Year:        int(req.GetYear()),
+		ContentType: req.GetItemType(),
+		ProviderIDs: stringMapFromStruct(req.GetProviderIds()),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	response := &pluginv1.SearchMetadataResponse{
+		Results: make([]*pluginv1.ProviderSearchResult, 0, len(results)),
+	}
+	for _, result := range results {
+		providerIDs, err := stringStruct(result.ProviderIDs)
+		if err != nil {
+			return nil, err
+		}
+		response.Results = append(response.Results, &pluginv1.ProviderSearchResult{
+			ProviderId:    result.ProviderIDs["tvdb"],
+			ItemType:      req.GetItemType(),
+			Title:         result.Name,
+			Year:          int32(result.Year),
+			Overview:      result.Overview,
+			ProviderIds:   providerIDs,
+			ImageUrl:      result.ImageURL,
+			OriginalTitle: "",
+		})
+	}
+	return response, nil
+}
+
+func (s *metadataServer) GetMetadata(ctx context.Context, req *pluginv1.GetMetadataRequest) (*pluginv1.GetMetadataResponse, error) {
+	p, err := s.runtime.providerForRequest()
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := p.GetMetadata(ctx, metadata.MetadataRequest{
+		ProviderIDs: map[string]string{"tvdb": req.GetProviderId()},
+		ContentType: req.GetItemType(),
+	})
+	if err != nil || result == nil {
+		return nil, err
+	}
+
+	item, err := metadataItemFromResult(result, req.GetItemType())
+	if err != nil {
+		return nil, err
+	}
+	return &pluginv1.GetMetadataResponse{Item: item}, nil
+}
+
+func (s *metadataServer) GetSeasons(ctx context.Context, req *pluginv1.GetSeasonsRequest) (*pluginv1.GetSeasonsResponse, error) {
+	p, err := s.runtime.providerForRequest()
+	if err != nil {
+		return nil, err
+	}
+
+	results, err := p.GetSeasons(ctx, metadata.SeasonsRequest{
+		ProviderIDs: map[string]string{"tvdb": req.GetSeriesProviderId()},
+		ContentType: "series",
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	response := &pluginv1.GetSeasonsResponse{
+		Seasons: make([]*pluginv1.SeasonRecord, 0, len(results)),
+	}
+	for _, result := range results {
+		providerIDs, err := stringStruct(map[string]string{"tvdb": result.ContentID})
+		if err != nil {
+			return nil, err
+		}
+		response.Seasons = append(response.Seasons, &pluginv1.SeasonRecord{
+			ProviderId:   result.ContentID,
+			ProviderIds:  providerIDs,
+			SeasonNumber: int32(result.SeasonNumber),
+			Title:        result.Title,
+			Overview:     result.Overview,
+			AirDate:      result.AirDate,
+			PosterPath:   result.PosterPath,
+		})
+	}
+	return response, nil
+}
+
+func (s *metadataServer) GetEpisodes(ctx context.Context, req *pluginv1.GetEpisodesRequest) (*pluginv1.GetEpisodesResponse, error) {
+	p, err := s.runtime.providerForRequest()
+	if err != nil {
+		return nil, err
+	}
+
+	results, err := p.GetEpisodes(ctx, metadata.EpisodesRequest{
+		ProviderIDs:  map[string]string{"tvdb": req.GetSeriesProviderId()},
+		SeasonNumber: int(req.GetSeasonNumber()),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	response := &pluginv1.GetEpisodesResponse{
+		Episodes: make([]*pluginv1.EpisodeRecord, 0, len(results)),
+	}
+	for _, result := range results {
+		providerIDs, err := stringStruct(result.ProviderIDs)
+		if err != nil {
+			return nil, err
+		}
+		response.Episodes = append(response.Episodes, &pluginv1.EpisodeRecord{
+			ProviderId:    result.ContentID,
+			SeasonNumber:  int32(result.SeasonNumber),
+			EpisodeNumber: int32(result.EpisodeNumber),
+			Title:         result.Title,
+			Overview:      result.Overview,
+			AirDate:       result.AirDate,
+			Runtime:       int32(result.Runtime),
+			StillPath:     result.StillPath,
+			ProviderIds:   providerIDs,
+			Ratings:       ratingsStruct(result.Ratings),
+		})
+	}
+	return response, nil
+}
+
+func (s *metadataServer) GetImages(context.Context, *pluginv1.GetImagesRequest) (*pluginv1.GetImagesResponse, error) {
+	return &pluginv1.GetImagesResponse{}, nil
+}
+
+func main() {
+	manifest, err := loadManifest()
+	if err != nil {
+		panic(err)
+	}
+
+	rs := &runtimeServer{manifest: manifest}
+
+	runtime.Serve(runtime.ServeConfig{
+		Servers: runtime.CapabilityServers{
+			Runtime:          rs,
+			MetadataProvider: &metadataServer{runtime: rs},
+		},
+	})
+}
+
+func loadManifest() (*pluginv1.PluginManifest, error) {
+	executablePath, err := os.Executable()
+	if err != nil {
+		return nil, fmt.Errorf("resolve executable path: %w", err)
+	}
+
+	manifestPath := filepath.Join(filepath.Dir(executablePath), "manifest.json")
+	data, err := os.ReadFile(manifestPath)
+	if err != nil {
+		return nil, fmt.Errorf("read manifest file %q: %w", manifestPath, err)
+	}
+
+	manifest, err := publicmanifest.Load(data)
+	if err != nil {
+		return nil, fmt.Errorf("load manifest file %q: %w", manifestPath, err)
+	}
+	return manifest, nil
+}
+
+func metadataItemFromResult(result *metadata.MetadataResult, itemType string) (*pluginv1.MetadataItem, error) {
+	providerIDs, err := stringStruct(result.ProviderIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pluginv1.MetadataItem{
+		ProviderId:        result.ProviderIDs["tvdb"],
+		ItemType:          itemType,
+		Title:             result.Title,
+		OriginalTitle:     result.OriginalTitle,
+		SortTitle:         result.SortTitle,
+		Year:              int32(result.Year),
+		Overview:          result.Overview,
+		Tagline:           result.Tagline,
+		Runtime:           int32(result.Runtime),
+		Genres:            append([]string(nil), result.Genres...),
+		Studios:           append([]string(nil), result.Studios...),
+		Networks:          append([]string(nil), result.Networks...),
+		Countries:         append([]string(nil), result.Countries...),
+		OriginalLanguage:  result.OriginalLanguage,
+		ContentRating:     result.ContentRating,
+		ProviderIds:       providerIDs,
+		Ratings:           ratingsStruct(result.Ratings),
+		PosterPath:        result.PosterPath,
+		PosterThumbhash:   result.PosterThumbhash,
+		BackdropPath:      result.BackdropPath,
+		BackdropThumbhash: result.BackdropThumbhash,
+		LogoPath:          result.LogoPath,
+		SeasonCount:       int32(result.SeasonCount),
+		FirstAirDate:      result.FirstAirDate,
+		LastAirDate:       result.LastAirDate,
+		People:            peopleToRecords(result.People),
+	}, nil
+}
+
+func peopleToRecords(people []models.ItemPerson) []*pluginv1.PersonRecord {
+	if len(people) == 0 {
+		return nil
+	}
+
+	records := make([]*pluginv1.PersonRecord, 0, len(people))
+	for _, person := range people {
+		records = append(records, &pluginv1.PersonRecord{
+			Name:           person.Name,
+			Kind:           person.Kind.String(),
+			Character:      person.Character,
+			SortOrder:      int32(person.SortOrder),
+			TmdbId:         person.TmdbID,
+			TvdbId:         person.TvdbID,
+			ImdbId:         person.ImdbID,
+			PlexGuid:       person.PlexGUID,
+			PhotoPath:      person.PhotoPath,
+			PhotoThumbhash: person.PhotoThumbhash,
+		})
+	}
+	return records
+}
+
+func stringMapFromStruct(value *structpb.Struct) map[string]string {
+	result := make(map[string]string)
+	if value == nil {
+		return result
+	}
+	for key, raw := range value.AsMap() {
+		text, ok := raw.(string)
+		if ok && text != "" {
+			result[key] = text
+		}
+	}
+	return result
+}
+
+func stringStruct(value map[string]string) (*structpb.Struct, error) {
+	if len(value) == 0 {
+		return nil, nil
+	}
+
+	converted := make(map[string]any, len(value))
+	for key, entry := range value {
+		if entry == "" {
+			continue
+		}
+		converted[key] = entry
+	}
+	if len(converted) == 0 {
+		return nil, nil
+	}
+	return structpb.NewStruct(converted)
+}
+
+func structFromMap(value map[string]any) *structpb.Struct {
+	if len(value) == 0 {
+		return nil
+	}
+	result, err := structpb.NewStruct(value)
+	if err != nil {
+		panic(err)
+	}
+	return result
+}
+
+func ratingsStruct(ratings metadata.Ratings) *structpb.Struct {
+	return structFromMap(ratingsMap(ratings))
+}
+
+func ratingsMap(ratings metadata.Ratings) map[string]any {
+	result := make(map[string]any)
+	if ratings.IMDB != 0 {
+		result["imdb"] = ratings.IMDB
+	}
+	if ratings.TMDB != 0 {
+		result["tmdb"] = ratings.TMDB
+	}
+	if ratings.RTCritic != 0 {
+		result["rt_critic"] = ratings.RTCritic
+	}
+	if ratings.RTAudience != 0 {
+		result["rt_audience"] = ratings.RTAudience
+	}
+	return result
+}

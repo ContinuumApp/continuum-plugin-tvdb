@@ -1,0 +1,91 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+          - os: ubuntu-latest
+            goos: linux
+            goarch: arm64
+          - os: macos-latest
+            goos: darwin
+            goarch: arm64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+
+      - name: Build plugin binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: '0'
+          GOPRIVATE: github.com/ContinuumApp/*
+        run: |
+          mkdir -p dist
+          go build -trimpath -ldflags="-s -w" -o dist/plugin .
+
+      - name: Compute checksum
+        run: |
+          cd dist
+          sha256sum plugin > plugin.sha256
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: plugin-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            dist/plugin
+            dist/plugin.sha256
+            manifest.json
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          for dir in artifacts/plugin-*; do
+            platform=$(basename "$dir" | sed 's/plugin-//')
+            mkdir -p "release/${platform}"
+            cp "${dir}/plugin" "release/${platform}/plugin"
+            cp "${dir}/plugin.sha256" "release/${platform}/plugin.sha256"
+            cp "${dir}/manifest.json" "release/${platform}/manifest.json"
+          done
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/linux-amd64/plugin
+            release/linux-amd64/plugin.sha256
+            release/linux-amd64/manifest.json
+            release/linux-arm64/plugin
+            release/linux-arm64/plugin.sha256
+            release/linux-arm64/manifest.json
+            release/darwin-arm64/plugin
+            release/darwin-arm64/plugin.sha256
+            release/darwin-arm64/manifest.json
+          generate_release_notes: true

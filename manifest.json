@@ -1,0 +1,27 @@
+{
+  "plugin_id": "continuum.tvdb",
+  "version": "1.0.0",
+  "checksum": "__CHECKSUM__",
+  "continuum_api_version": "v1",
+  "supported_platforms": [
+    {"os": "darwin", "arch": "arm64"},
+    {"os": "linux", "arch": "amd64"},
+    {"os": "linux", "arch": "arm64"}
+  ],
+  "capabilities": [
+    {
+      "type": "metadata_provider.v1",
+      "id": "tvdb",
+      "display_name": "TVDB",
+      "description": "TVDB metadata provider for Continuum."
+    }
+  ],
+  "global_config_schema": [
+    {
+      "key": "connection",
+      "title": "Connection",
+      "description": "TVDB API key and subscriber PIN.",
+      "json_schema": "{\"type\":\"object\",\"properties\":{\"api_key\":{\"type\":\"string\",\"minLength\":1},\"pin\":{\"type\":\"string\",\"minLength\":1}},\"required\":[\"api_key\",\"pin\"],\"additionalProperties\":false}"
+    }
+  ]
+}
