@@ -22,6 +22,9 @@ import (
 	"github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginsdk/runtime"
 )
 
+// version is set at build time via -ldflags "-X main.version=...".
+var version string
+
 type connectionConfig struct {
 	APIKey string
 	PIN    string
@@ -243,6 +246,10 @@ func loadManifest() (*pluginv1.PluginManifest, error) {
 	manifest, err := publicmanifest.Load(manifestJSON)
 	if err != nil {
 		return nil, fmt.Errorf("load embedded manifest: %w", err)
+	}
+
+	if version != "" {
+		manifest.Version = version
 	}
 
 	executablePath, err := os.Executable()

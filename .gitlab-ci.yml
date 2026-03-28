@@ -33,7 +33,7 @@ build:
   stage: build
   script:
     - mkdir -p dist
-    - make build-all BINARY="$CI_PROJECT_NAME-$RELEASE_VERSION"
+    - make build-all BINARY="$CI_PROJECT_NAME-$RELEASE_VERSION" VERSION="${RELEASE_VERSION#v}"
     - echo "BUILD_JOB_ID=$CI_JOB_ID" > build.env
     - echo "RELEASE_VERSION=$RELEASE_VERSION" >> build.env
   artifacts:

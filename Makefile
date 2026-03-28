@@ -2,9 +2,11 @@
 
 BINARY=plugin
 PLATFORMS=linux/amd64 linux/arm64 darwin/arm64
+VERSION ?= $(shell git describe --tags --always 2>/dev/null | sed 's/^v//')
+LDFLAGS=-s -w -X main.version=$(VERSION)
 
 build:
-	go build -trimpath -ldflags="-s -w" -o $(BINARY) .
+	go build -trimpath -ldflags="$(LDFLAGS)" -o $(BINARY) .
 
 test:
 	go test ./...
@@ -18,5 +20,5 @@ clean:
 build-all:
 	@for platform in $(PLATFORMS); do \
 		GOOS=$${platform%%/*} GOARCH=$${platform##*/} CGO_ENABLED=0 \
-		go build -trimpath -ldflags="-s -w" -o dist/$(BINARY)-$${platform%%/*}-$${platform##*/} .; \
+		go build -trimpath -ldflags="$(LDFLAGS)" -o dist/$(BINARY)-$${platform%%/*}-$${platform##*/} .; \
 	done
