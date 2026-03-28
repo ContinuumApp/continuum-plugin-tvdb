@@ -1,0 +1,80 @@
+stages:
+  - test
+  - build
+  - release
+
+default:
+  image: golang:1.26
+  interruptible: true
+  tags:
+    - docker
+    - amd64
+  before_script:
+    - export PATH="/opt/homebrew/bin:/usr/local/go/bin:$PATH"
+    - go version
+  cache:
+    key: "$CI_PROJECT_ID-go"
+    paths:
+      - .cache/go-build
+      - .cache/gomod
+
+variables:
+  GOCACHE: "$CI_PROJECT_DIR/.cache/go-build"
+  GOMODCACHE: "$CI_PROJECT_DIR/.cache/gomod"
+  CGO_ENABLED: "0"
+  RELEASE_VERSION: "v0.0.$CI_PIPELINE_IID"
+
+test:
+  stage: test
+  script:
+    - go test ./...
+
+build:
+  stage: build
+  script:
+    - mkdir -p dist
+    - make build-all BINARY="$CI_PROJECT_NAME-$RELEASE_VERSION"
+    - echo "BUILD_JOB_ID=$CI_JOB_ID" > build.env
+    - echo "RELEASE_VERSION=$RELEASE_VERSION" >> build.env
+  artifacts:
+    paths:
+      - dist/
+    reports:
+      dotenv: build.env
+    expire_in: 1 week
+
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/cli:latest
+  before_script: []
+  needs:
+    - job: build
+      artifacts: true
+  rules:
+    - if: $CI_COMMIT_BRANCH
+  script:
+    - echo "Creating release for $CI_COMMIT_SHA"
+  release:
+    tag_name: "$RELEASE_VERSION"
+    name: "$CI_PROJECT_NAME $RELEASE_VERSION"
+    description: |
+      Automated build release `$RELEASE_VERSION` for commit `$CI_COMMIT_SHA` on branch `$CI_COMMIT_REF_NAME`.
+
+      Pipeline: $CI_PIPELINE_URL
+      Commit: $CI_PROJECT_URL/-/commit/$CI_COMMIT_SHA
+      Artifacts: $CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_REF_NAME/browse/dist?job=build
+    ref: "$CI_COMMIT_SHA"
+    assets:
+      links:
+        - name: "$CI_PROJECT_NAME-$RELEASE_VERSION-linux-amd64"
+          url: "$CI_PROJECT_URL/-/jobs/$BUILD_JOB_ID/artifacts/raw/dist/$CI_PROJECT_NAME-$RELEASE_VERSION-linux-amd64"
+          filepath: "/dist/$CI_PROJECT_NAME-$RELEASE_VERSION-linux-amd64"
+          link_type: other
+        - name: "$CI_PROJECT_NAME-$RELEASE_VERSION-linux-arm64"
+          url: "$CI_PROJECT_URL/-/jobs/$BUILD_JOB_ID/artifacts/raw/dist/$CI_PROJECT_NAME-$RELEASE_VERSION-linux-arm64"
+          filepath: "/dist/$CI_PROJECT_NAME-$RELEASE_VERSION-linux-arm64"
+          link_type: other
+        - name: "$CI_PROJECT_NAME-$RELEASE_VERSION-darwin-arm64"
+          url: "$CI_PROJECT_URL/-/jobs/$BUILD_JOB_ID/artifacts/raw/dist/$CI_PROJECT_NAME-$RELEASE_VERSION-darwin-arm64"
+          filepath: "/dist/$CI_PROJECT_NAME-$RELEASE_VERSION-darwin-arm64"
+          link_type: other
