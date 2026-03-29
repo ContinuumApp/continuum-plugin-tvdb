@@ -85,7 +85,7 @@ func (p *Provider) searchByID(ctx context.Context, id int, contentType string) (
 			Name:        movie.Name,
 			Year:        extractYear(movie.Year),
 			ProviderIDs: ids,
-			ImageURL:    tvdbPosterPreview(movie.Artworks, movie.Image),
+			ImageURL:    movie.Image,
 			Provider:    p.Slug(),
 		}}, nil
 	case "series":
@@ -98,7 +98,7 @@ func (p *Provider) searchByID(ctx context.Context, id int, contentType string) (
 			Name:        series.Name,
 			Year:        extractYear(series.Year),
 			ProviderIDs: ids,
-			ImageURL:    tvdbPosterPreview(series.Artworks, series.Image),
+			ImageURL:    series.Image,
 			Overview:    series.Overview,
 			Provider:    p.Slug(),
 		}}, nil
@@ -118,7 +118,7 @@ func (p *Provider) searchByTitle(ctx context.Context, query metadata.SearchQuery
 			Name:        r.Name,
 			Year:        extractYear(r.Year),
 			ProviderIDs: map[string]string{"tvdb": r.TVDBID},
-			ImageURL:    tvdbPreviewURL(r.ImageURL, r.Thumbnail),
+			ImageURL:    r.ImageURL,
 			Overview:    r.Overview,
 			Provider:    p.Slug(),
 		})
@@ -286,7 +286,7 @@ func (p *Provider) GetImages(ctx context.Context, req metadata.ImageRequest) ([]
 			continue
 		}
 		out = append(out, metadata.RemoteImage{
-			URL:      tvdbPreviewURL(a.Image, a.Thumbnail),
+			URL:      a.Image,
 			Type:     imgType,
 			Language: a.Language,
 			Width:    a.Width,
@@ -419,24 +419,6 @@ func findContentRating(ratings []ContentRating) string {
 		}
 	}
 	return ratings[0].Name
-}
-
-func tvdbPreviewURL(imageURL, thumbnailURL string) string {
-	if thumbnailURL != "" {
-		return thumbnailURL
-	}
-	return imageURL
-}
-
-// tvdbPosterPreview returns a poster thumbnail from the artworks list,
-// falling back to fallbackImage if no poster artwork with a thumbnail exists.
-func tvdbPosterPreview(artworks []ArtworkRecord, fallbackImage string) string {
-	for _, a := range artworks {
-		if a.Type == 2 && a.Thumbnail != "" { // type 2 = poster
-			return a.Thumbnail
-		}
-	}
-	return fallbackImage
 }
 
 func convertCharacters(chars []Character) []models.ItemPerson {

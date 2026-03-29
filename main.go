@@ -25,6 +25,35 @@ import (
 // version is set at build time via -ldflags "-X main.version=...".
 var version string
 
+const tvdbArtworksBase = "https://artworks.thetvdb.com/"
+
+func tvdbCanonicalPath(imageURL string) string {
+	if imageURL == "" {
+		return ""
+	}
+	path := strings.TrimPrefix(imageURL, tvdbArtworksBase)
+	return "tvdb://" + path
+}
+
+func resolveOneTVDBPath(barePath, variant string) string {
+	if barePath == "" {
+		return ""
+	}
+	fullURL := tvdbArtworksBase + barePath
+	if variant == "card" {
+		return tvdbThumbnailURL(fullURL)
+	}
+	return fullURL
+}
+
+func tvdbThumbnailURL(imageURL string) string {
+	dotIdx := strings.LastIndex(imageURL, ".")
+	if dotIdx <= 0 {
+		return imageURL
+	}
+	return imageURL[:dotIdx] + "_t" + imageURL[dotIdx:]
+}
+
 type connectionConfig struct {
 	APIKey string
 	PIN    string
@@ -178,7 +207,7 @@ func (s *metadataServer) GetSeasons(ctx context.Context, req *pluginv1.GetSeason
 			Title:        result.Title,
 			Overview:     result.Overview,
 			AirDate:      result.AirDate,
-			PosterPath:   result.PosterPath,
+			PosterPath:   tvdbCanonicalPath(result.PosterPath),
 		})
 	}
 	return response, nil
@@ -214,7 +243,7 @@ func (s *metadataServer) GetEpisodes(ctx context.Context, req *pluginv1.GetEpiso
 			Overview:      result.Overview,
 			AirDate:       result.AirDate,
 			Runtime:       int32(result.Runtime),
-			StillPath:     result.StillPath,
+			StillPath:     tvdbCanonicalPath(result.StillPath),
 			ProviderIds:   providerIDs,
 			Ratings:       ratingsStruct(result.Ratings),
 		})
@@ -255,7 +284,7 @@ func (s *metadataServer) GetImages(ctx context.Context, req *pluginv1.GetImagesR
 		}
 		response.Images = append(response.Images, &pluginv1.ImageRecord{
 			Kind:     kind,
-			Url:      img.URL,
+			Url:      tvdbCanonicalPath(img.URL),
 			Language: img.Language,
 			Width:    int32(img.Width),
 			Height:   int32(img.Height),
@@ -263,6 +292,19 @@ func (s *metadataServer) GetImages(ctx context.Context, req *pluginv1.GetImagesR
 		})
 	}
 	return response, nil
+}
+
+func (s *metadataServer) ResolveImageURL(_ context.Context, req *pluginv1.ResolveImageURLRequest) (*pluginv1.ResolveImageURLResponse, error) {
+	url := resolveOneTVDBPath(req.GetPath(), req.GetVariant())
+	return &pluginv1.ResolveImageURLResponse{Url: url}, nil
+}
+
+func (s *metadataServer) ResolveImageURLs(_ context.Context, req *pluginv1.ResolveImageURLsRequest) (*pluginv1.ResolveImageURLsResponse, error) {
+	urls := make(map[string]string, len(req.GetPaths()))
+	for _, path := range req.GetPaths() {
+		urls[path] = resolveOneTVDBPath(path, req.GetVariant())
+	}
+	return &pluginv1.ResolveImageURLsResponse{Urls: urls}, nil
 }
 
 func main() {
@@ -329,11 +371,11 @@ func metadataItemFromResult(result *metadata.MetadataResult, itemType string) (*
 		ContentRating:     result.ContentRating,
 		ProviderIds:       providerIDs,
 		Ratings:           ratingsStruct(result.Ratings),
-		PosterPath:        result.PosterPath,
+		PosterPath:        tvdbCanonicalPath(result.PosterPath),
 		PosterThumbhash:   result.PosterThumbhash,
-		BackdropPath:      result.BackdropPath,
+		BackdropPath:      tvdbCanonicalPath(result.BackdropPath),
 		BackdropThumbhash: result.BackdropThumbhash,
-		LogoPath:          result.LogoPath,
+		LogoPath:          tvdbCanonicalPath(result.LogoPath),
 		SeasonCount:       int32(result.SeasonCount),
 		FirstAirDate:      result.FirstAirDate,
 		LastAirDate:       result.LastAirDate,

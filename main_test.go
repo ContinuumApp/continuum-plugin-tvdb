@@ -11,6 +11,33 @@ import (
 	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
 )
 
+func TestResolveImageURL(t *testing.T) {
+	ms := &metadataServer{}
+	tests := []struct {
+		name, path, variant, want string
+	}{
+		{"poster card", "banners/posters/81189-10.jpg", "card", "https://artworks.thetvdb.com/banners/posters/81189-10_t.jpg"},
+		{"poster featured", "banners/posters/81189-10.jpg", "featured", "https://artworks.thetvdb.com/banners/posters/81189-10.jpg"},
+		{"poster original", "banners/posters/81189-10.jpg", "original", "https://artworks.thetvdb.com/banners/posters/81189-10.jpg"},
+		{"empty variant", "banners/posters/81189-10.jpg", "", "https://artworks.thetvdb.com/banners/posters/81189-10.jpg"},
+		{"backdrop card", "banners/fanart/81189-5.jpg", "card", "https://artworks.thetvdb.com/banners/fanart/81189-5_t.jpg"},
+		{"empty path", "", "card", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp, err := ms.ResolveImageURL(context.Background(), &pluginv1.ResolveImageURLRequest{
+				Path: tt.path, Variant: tt.variant,
+			})
+			if err != nil {
+				t.Fatalf("error = %v", err)
+			}
+			if resp.GetUrl() != tt.want {
+				t.Fatalf("got %q, want %q", resp.GetUrl(), tt.want)
+			}
+		})
+	}
+}
+
 func TestRuntimeServerConfigure_ConfiguresTVDBProvider(t *testing.T) {
 	server := &runtimeServer{}
 
