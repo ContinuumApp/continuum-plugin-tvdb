@@ -1,12 +1,21 @@
 {
   "plugin_id": "continuum.tvdb",
-  "version": "1.0.0",
+  "version": "1.2.2",
   "checksum": "__CHECKSUM__",
   "continuum_api_version": "v1",
   "supported_platforms": [
-    {"os": "darwin", "arch": "arm64"},
-    {"os": "linux", "arch": "amd64"},
-    {"os": "linux", "arch": "arm64"}
+    {
+      "os": "darwin",
+      "arch": "arm64"
+    },
+    {
+      "os": "linux",
+      "arch": "amd64"
+    },
+    {
+      "os": "linux",
+      "arch": "arm64"
+    }
   ],
   "capabilities": [
     {
