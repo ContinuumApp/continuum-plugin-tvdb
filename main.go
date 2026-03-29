@@ -222,8 +222,40 @@ func (s *metadataServer) GetEpisodes(ctx context.Context, req *pluginv1.GetEpiso
 	return response, nil
 }
 
-func (s *metadataServer) GetImages(context.Context, *pluginv1.GetImagesRequest) (*pluginv1.GetImagesResponse, error) {
-	return &pluginv1.GetImagesResponse{}, nil
+func (s *metadataServer) GetImages(ctx context.Context, req *pluginv1.GetImagesRequest) (*pluginv1.GetImagesResponse, error) {
+	p, err := s.runtime.providerForRequest()
+	if err != nil {
+		return nil, err
+	}
+
+	images, err := p.GetImages(ctx, metadata.ImageRequest{
+		ProviderIDs: map[string]string{"tvdb": req.GetProviderId()},
+		ContentType: req.GetItemType(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	response := &pluginv1.GetImagesResponse{}
+	for _, img := range images {
+		kind := ""
+		switch img.Type {
+		case metadata.ImagePoster:
+			kind = "poster"
+		case metadata.ImageBackdrop:
+			kind = "backdrop"
+		case metadata.ImageLogo:
+			kind = "logo"
+		}
+		response.Images = append(response.Images, &pluginv1.ImageRecord{
+			Kind:     kind,
+			Url:      img.URL,
+			Language: img.Language,
+			Width:    int32(img.Width),
+			Height:   int32(img.Height),
+		})
+	}
+	return response, nil
 }
 
 func main() {
