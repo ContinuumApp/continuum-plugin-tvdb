@@ -247,12 +247,19 @@ func (s *metadataServer) GetImages(ctx context.Context, req *pluginv1.GetImagesR
 		case metadata.ImageLogo:
 			kind = "logo"
 		}
+		var md *structpb.Struct
+		if img.Rating > 0 {
+			md, _ = structpb.NewStruct(map[string]interface{}{
+				"rating": img.Rating,
+			})
+		}
 		response.Images = append(response.Images, &pluginv1.ImageRecord{
 			Kind:     kind,
 			Url:      img.URL,
 			Language: img.Language,
 			Width:    int32(img.Width),
 			Height:   int32(img.Height),
+			Metadata: md,
 		})
 	}
 	return response, nil
