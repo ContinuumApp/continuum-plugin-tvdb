@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -37,7 +38,7 @@ type Client struct {
 // and rate limit (requests per second). Pass an empty pin for project-level keys.
 func NewClient(apiKey, pin string, rateLimit int) *Client {
 	if rateLimit <= 0 {
-		rateLimit = 10
+		rateLimit = 50
 	}
 	return &Client{
 		httpClient: &http.Client{Timeout: 30 * time.Second},
@@ -184,8 +185,15 @@ func (c *Client) doGet(ctx context.Context, path string, dest any) error {
 		// 429 Too Many Requests.
 		if resp.StatusCode == http.StatusTooManyRequests {
 			resp.Body.Close()
+			retryAfter := resp.Header.Get("Retry-After")
 			if attempt < maxRetries {
 				backoff := retryAfterOrDefault(resp, attempt)
+				slog.Warn("tvdb: rate limited by API, backing off",
+					"path", path,
+					"attempt", attempt+1,
+					"retry_after_header", retryAfter,
+					"backoff", backoff.String(),
+				)
 				select {
 				case <-time.After(backoff):
 				case <-ctx.Done():
@@ -193,6 +201,11 @@ func (c *Client) doGet(ctx context.Context, path string, dest any) error {
 				}
 				continue
 			}
+			slog.Error("tvdb: rate limited after max retries",
+				"path", path,
+				"retries", maxRetries,
+				"retry_after_header", retryAfter,
+			)
 			return fmt.Errorf("tvdb: rate limited after %d retries", maxRetries)
 		}
 
