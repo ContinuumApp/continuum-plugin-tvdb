@@ -47,6 +47,7 @@ type SearchResult struct {
 	Studios         []string   `json:"studios"`
 	ID              string     `json:"id"`
 	ImageURL        string     `json:"image_url"`
+	Thumbnail       string     `json:"thumbnail"`
 	Name            string     `json:"name"`
 	FirstAirTime    string     `json:"first_air_time"`
 	Overview        string     `json:"overview"`

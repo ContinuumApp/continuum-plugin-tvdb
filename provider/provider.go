@@ -85,7 +85,7 @@ func (p *Provider) searchByID(ctx context.Context, id int, contentType string) (
 			Name:        movie.Name,
 			Year:        extractYear(movie.Year),
 			ProviderIDs: ids,
-			ImageURL:    movie.Image,
+			ImageURL:    tvdbPosterPreview(movie.Artworks, movie.Image),
 			Provider:    p.Slug(),
 		}}, nil
 	case "series":
@@ -98,7 +98,7 @@ func (p *Provider) searchByID(ctx context.Context, id int, contentType string) (
 			Name:        series.Name,
 			Year:        extractYear(series.Year),
 			ProviderIDs: ids,
-			ImageURL:    series.Image,
+			ImageURL:    tvdbPosterPreview(series.Artworks, series.Image),
 			Overview:    series.Overview,
 			Provider:    p.Slug(),
 		}}, nil
@@ -118,7 +118,7 @@ func (p *Provider) searchByTitle(ctx context.Context, query metadata.SearchQuery
 			Name:        r.Name,
 			Year:        extractYear(r.Year),
 			ProviderIDs: map[string]string{"tvdb": r.TVDBID},
-			ImageURL:    r.ImageURL,
+			ImageURL:    tvdbPreviewURL(r.ImageURL, r.Thumbnail),
 			Overview:    r.Overview,
 			Provider:    p.Slug(),
 		})
@@ -426,6 +426,17 @@ func tvdbPreviewURL(imageURL, thumbnailURL string) string {
 		return thumbnailURL
 	}
 	return imageURL
+}
+
+// tvdbPosterPreview returns a poster thumbnail from the artworks list,
+// falling back to fallbackImage if no poster artwork with a thumbnail exists.
+func tvdbPosterPreview(artworks []ArtworkRecord, fallbackImage string) string {
+	for _, a := range artworks {
+		if a.Type == 2 && a.Thumbnail != "" { // type 2 = poster
+			return a.Thumbnail
+		}
+	}
+	return fallbackImage
 }
 
 func convertCharacters(chars []Character) []models.ItemPerson {
