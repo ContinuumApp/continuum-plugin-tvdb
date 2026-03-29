@@ -286,7 +286,7 @@ func (p *Provider) GetImages(ctx context.Context, req metadata.ImageRequest) ([]
 			continue
 		}
 		out = append(out, metadata.RemoteImage{
-			URL:      a.Image,
+			URL:      tvdbPreviewURL(a.Image, a.Thumbnail),
 			Type:     imgType,
 			Language: a.Language,
 			Width:    a.Width,
@@ -419,6 +419,13 @@ func findContentRating(ratings []ContentRating) string {
 		}
 	}
 	return ratings[0].Name
+}
+
+func tvdbPreviewURL(imageURL, thumbnailURL string) string {
+	if thumbnailURL != "" {
+		return thumbnailURL
+	}
+	return imageURL
 }
 
 func convertCharacters(chars []Character) []models.ItemPerson {
