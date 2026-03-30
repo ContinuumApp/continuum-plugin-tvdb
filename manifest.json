@@ -22,7 +22,14 @@
       "type": "metadata_provider.v1",
       "id": "tvdb",
       "display_name": "TVDB",
-      "description": "TVDB metadata provider for Continuum."
+      "description": "TheTVDB — metadata for TV series.",
+      "metadata": {
+        "default_priority": {
+          "series": 2,
+          "season": 2,
+          "episode": 2
+        }
+      }
     }
   ],
   "global_config_schema": [
