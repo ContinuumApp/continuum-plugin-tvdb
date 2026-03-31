@@ -163,10 +163,7 @@ func (s *metadataServer) GetMetadata(ctx context.Context, req *pluginv1.GetMetad
 		return nil, err
 	}
 
-	result, err := p.GetMetadata(ctx, metadata.MetadataRequest{
-		ProviderIDs: map[string]string{"tvdb": req.GetProviderId()},
-		ContentType: req.GetItemType(),
-	})
+	result, err := p.GetMetadata(ctx, metadataRequestFromProto(req, "tvdb"))
 	if err != nil || result == nil {
 		return nil, err
 	}
@@ -184,10 +181,7 @@ func (s *metadataServer) GetSeasons(ctx context.Context, req *pluginv1.GetSeason
 		return nil, err
 	}
 
-	results, err := p.GetSeasons(ctx, metadata.SeasonsRequest{
-		ProviderIDs: map[string]string{"tvdb": req.GetSeriesProviderId()},
-		ContentType: "series",
-	})
+	results, err := p.GetSeasons(ctx, seasonsRequestFromProto(req, "tvdb"))
 	if err != nil {
 		return nil, err
 	}
@@ -219,10 +213,7 @@ func (s *metadataServer) GetEpisodes(ctx context.Context, req *pluginv1.GetEpiso
 		return nil, err
 	}
 
-	results, err := p.GetEpisodes(ctx, metadata.EpisodesRequest{
-		ProviderIDs:  map[string]string{"tvdb": req.GetSeriesProviderId()},
-		SeasonNumber: int(req.GetSeasonNumber()),
-	})
+	results, err := p.GetEpisodes(ctx, episodesRequestFromProto(req, "tvdb"))
 	if err != nil {
 		return nil, err
 	}
@@ -257,10 +248,7 @@ func (s *metadataServer) GetImages(ctx context.Context, req *pluginv1.GetImagesR
 		return nil, err
 	}
 
-	images, err := p.GetImages(ctx, metadata.ImageRequest{
-		ProviderIDs: map[string]string{"tvdb": req.GetProviderId()},
-		ContentType: req.GetItemType(),
-	})
+	images, err := p.GetImages(ctx, imageRequestFromProto(req, "tvdb"))
 	if err != nil {
 		return nil, err
 	}
@@ -418,6 +406,45 @@ func stringMapFromStruct(value *structpb.Struct) map[string]string {
 		}
 	}
 	return result
+}
+
+func providerIDsFromProto(value *structpb.Struct, capabilityID string, fallbackID string) map[string]string {
+	result := stringMapFromStruct(value)
+	if fallbackID != "" && result[capabilityID] == "" {
+		result[capabilityID] = fallbackID
+	}
+	return result
+}
+
+func metadataRequestFromProto(req *pluginv1.GetMetadataRequest, capabilityID string) metadata.MetadataRequest {
+	return metadata.MetadataRequest{
+		ProviderIDs: providerIDsFromProto(req.GetProviderIds(), capabilityID, req.GetProviderId()),
+		ContentType: req.GetItemType(),
+		Language:    req.GetLanguage(),
+		FilePath:    req.GetFilePath(),
+	}
+}
+
+func seasonsRequestFromProto(req *pluginv1.GetSeasonsRequest, capabilityID string) metadata.SeasonsRequest {
+	return metadata.SeasonsRequest{
+		ProviderIDs: providerIDsFromProto(req.GetProviderIds(), capabilityID, req.GetSeriesProviderId()),
+		ContentType: "series",
+	}
+}
+
+func episodesRequestFromProto(req *pluginv1.GetEpisodesRequest, capabilityID string) metadata.EpisodesRequest {
+	return metadata.EpisodesRequest{
+		ProviderIDs:  providerIDsFromProto(req.GetProviderIds(), capabilityID, req.GetSeriesProviderId()),
+		SeasonNumber: int(req.GetSeasonNumber()),
+	}
+}
+
+func imageRequestFromProto(req *pluginv1.GetImagesRequest, capabilityID string) metadata.ImageRequest {
+	return metadata.ImageRequest{
+		ProviderIDs: providerIDsFromProto(req.GetProviderIds(), capabilityID, req.GetProviderId()),
+		ContentType: req.GetItemType(),
+		Language:    req.GetLanguage(),
+	}
 }
 
 func stringStruct(value map[string]string) (*structpb.Struct, error) {
