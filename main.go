@@ -14,12 +14,12 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/ContinuumApp/continuum-plugin-tvdb/metadata"
-	"github.com/ContinuumApp/continuum-plugin-tvdb/models"
-	"github.com/ContinuumApp/continuum-plugin-tvdb/provider"
 	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
 	publicmanifest "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginsdk/manifest"
 	"github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginsdk/runtime"
+	"github.com/ContinuumApp/continuum-plugin-tvdb/metadata"
+	"github.com/ContinuumApp/continuum-plugin-tvdb/models"
+	"github.com/ContinuumApp/continuum-plugin-tvdb/provider"
 )
 
 // version is set at build time via -ldflags "-X main.version=...".
@@ -173,6 +173,27 @@ func (s *metadataServer) GetMetadata(ctx context.Context, req *pluginv1.GetMetad
 		return nil, err
 	}
 	return &pluginv1.GetMetadataResponse{Item: item}, nil
+}
+
+func (s *metadataServer) GetPersonDetail(ctx context.Context, req *pluginv1.GetPersonDetailRequest) (*pluginv1.GetPersonDetailResponse, error) {
+	p, err := s.runtime.providerForRequest()
+	if err != nil {
+		return nil, err
+	}
+
+	result, err := p.GetPersonDetail(ctx, personDetailRequestFromProto(req))
+	if err != nil {
+		return nil, err
+	}
+	if result == nil {
+		return &pluginv1.GetPersonDetailResponse{}, nil
+	}
+
+	person, err := personDetailRecordFromResult(result)
+	if err != nil {
+		return nil, err
+	}
+	return &pluginv1.GetPersonDetailResponse{Person: person}, nil
 }
 
 func (s *metadataServer) GetSeasons(ctx context.Context, req *pluginv1.GetSeasonsRequest) (*pluginv1.GetSeasonsResponse, error) {
@@ -371,6 +392,26 @@ func metadataItemFromResult(result *metadata.MetadataResult, itemType string) (*
 	}, nil
 }
 
+func personDetailRecordFromResult(result *metadata.PersonDetailResult) (*pluginv1.PersonDetailRecord, error) {
+	providerIDs, err := stringStruct(result.ProviderIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pluginv1.PersonDetailRecord{
+		Name:           result.Name,
+		SortName:       result.SortName,
+		Bio:            result.Bio,
+		BirthDate:      result.BirthDate,
+		DeathDate:      result.DeathDate,
+		Birthplace:     result.Birthplace,
+		Homepage:       result.Homepage,
+		PhotoPath:      tvdbCanonicalPath(result.PhotoPath),
+		PhotoThumbhash: result.PhotoThumbhash,
+		ProviderIds:    providerIDs,
+	}, nil
+}
+
 func peopleToRecords(people []models.ItemPerson) []*pluginv1.PersonRecord {
 	if len(people) == 0 {
 		return nil
@@ -422,6 +463,13 @@ func metadataRequestFromProto(req *pluginv1.GetMetadataRequest, capabilityID str
 		ContentType: req.GetItemType(),
 		Language:    req.GetLanguage(),
 		FilePath:    req.GetFilePath(),
+	}
+}
+
+func personDetailRequestFromProto(req *pluginv1.GetPersonDetailRequest) metadata.PersonDetailRequest {
+	return metadata.PersonDetailRequest{
+		ProviderIDs: stringMapFromStruct(req.GetProviderIds()),
+		Language:    req.GetLanguage(),
 	}
 }
 

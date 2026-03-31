@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/ContinuumApp/continuum-plugin-tvdb/metadata"
 	"github.com/ContinuumApp/continuum-plugin-tvdb/models"
@@ -166,6 +167,48 @@ func (p *Provider) GetMetadata(ctx context.Context, req metadata.MetadataRequest
 		return p.getSeriesMetadata(ctx, id)
 	}
 	return nil, nil
+}
+
+func (p *Provider) GetPersonDetail(ctx context.Context, req metadata.PersonDetailRequest) (*metadata.PersonDetailResult, error) {
+	var (
+		id  int
+		err error
+	)
+
+	switch {
+	case req.ProviderIDs["tvdb"] != "":
+		id, err = strconv.Atoi(req.ProviderIDs["tvdb"])
+		if err != nil {
+			return nil, fmt.Errorf("tvdb: invalid TVDB person ID %q: %w", req.ProviderIDs["tvdb"], err)
+		}
+	case req.ProviderIDs["imdb"] != "":
+		id, err = p.findPersonByRemoteID(ctx, req.ProviderIDs["imdb"])
+	case req.ProviderIDs["tmdb"] != "":
+		id, err = p.findPersonByRemoteID(ctx, req.ProviderIDs["tmdb"])
+	default:
+		return nil, nil
+	}
+	if err != nil || id == 0 {
+		return nil, err
+	}
+
+	person, err := p.client.GetPersonExtended(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	providerIDs := map[string]string{"tvdb": strconv.Itoa(person.ID)}
+	fillRemoteIDs(providerIDs, person.RemoteIDs)
+
+	return &metadata.PersonDetailResult{
+		Name:        person.Name,
+		Bio:         findBiography(person.Biographies, req.Language),
+		BirthDate:   normalizeDate(person.Birth),
+		DeathDate:   normalizeDate(person.Death),
+		Birthplace:  person.BirthPlace,
+		PhotoPath:   person.Image,
+		ProviderIDs: providerIDs,
+	}, nil
 }
 
 func (p *Provider) getMovieMetadata(ctx context.Context, id int) (*metadata.MetadataResult, error) {
@@ -477,6 +520,19 @@ func fillRemoteIDs(ids map[string]string, remoteIDs []RemoteID) {
 	}
 }
 
+func (p *Provider) findPersonByRemoteID(ctx context.Context, remoteID string) (int, error) {
+	results, err := p.client.SearchByRemoteID(ctx, remoteID)
+	if err != nil {
+		return 0, err
+	}
+	for _, r := range results {
+		if r.People != nil {
+			return r.People.ID, nil
+		}
+	}
+	return 0, nil
+}
+
 func artworkTypeToImageType(artType int) (metadata.ImageType, bool) {
 	switch artType {
 	case 2:
@@ -488,4 +544,60 @@ func artworkTypeToImageType(artType int) (metadata.ImageType, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func findBiography(biographies []Biography, requestedLanguage string) string {
+	if len(biographies) == 0 {
+		return ""
+	}
+	if bio := findBiographyByLanguage(biographies, requestedLanguage); bio != "" {
+		return bio
+	}
+	if bio := findBiographyByLanguage(biographies, "eng"); bio != "" {
+		return bio
+	}
+	if bio := findBiographyByLanguage(biographies, "en"); bio != "" {
+		return bio
+	}
+	return biographies[0].Biography
+}
+
+func findBiographyByLanguage(biographies []Biography, requestedLanguage string) string {
+	for _, biography := range biographies {
+		if biography.Biography == "" {
+			continue
+		}
+		if languageMatches(requestedLanguage, biography.Language) {
+			return biography.Biography
+		}
+	}
+	return ""
+}
+
+func languageMatches(requested, candidate string) bool {
+	req := normalizeLanguageTag(requested)
+	got := normalizeLanguageTag(candidate)
+	if req == "" || got == "" {
+		return false
+	}
+	if req == got {
+		return true
+	}
+	return len(req) >= 2 && len(got) >= 2 && req[:2] == got[:2]
+}
+
+func normalizeLanguageTag(value string) string {
+	value = strings.ToLower(strings.TrimSpace(value))
+	if idx := strings.IndexAny(value, "-_"); idx >= 0 {
+		value = value[:idx]
+	}
+	return value
+}
+
+func normalizeDate(value string) string {
+	value = strings.TrimSpace(value)
+	if len(value) >= 10 && value[4] == '-' && value[7] == '-' {
+		return value[:10]
+	}
+	return value
 }

@@ -214,6 +214,17 @@ type PeopleBaseRecord struct {
 	Name string `json:"name"`
 }
 
+// PeopleExtendedRecord is returned by GET /people/{id}/extended.
+type PeopleExtendedRecord struct {
+	PeopleBaseRecord
+	Birth       string      `json:"birth"`
+	BirthPlace  string      `json:"birthPlace"`
+	Biographies []Biography `json:"biographies"`
+	Death       string      `json:"death"`
+	Image       string      `json:"image"`
+	RemoteIDs   []RemoteID  `json:"remoteIds"`
+}
+
 // Character represents a cast/crew member in series/movie extended responses.
 type Character struct {
 	ID           int    `json:"id"`
@@ -248,6 +259,12 @@ type StatusRecord struct {
 type Alias struct {
 	Language string `json:"language"`
 	Name     string `json:"name"`
+}
+
+// Biography is a localized biography for a person.
+type Biography struct {
+	Biography string `json:"biography"`
+	Language  string `json:"language"`
 }
 
 // ArtworkRecord is an image associated with an entity.

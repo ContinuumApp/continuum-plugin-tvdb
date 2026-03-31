@@ -284,6 +284,16 @@ func (c *Client) SearchByRemoteID(ctx context.Context, remoteID string) ([]Remot
 	return resp.Data, nil
 }
 
+// GetPersonExtended fetches the extended record for a person.
+func (c *Client) GetPersonExtended(ctx context.Context, id int) (*PeopleExtendedRecord, error) {
+	path := fmt.Sprintf("/people/%d/extended?meta=translations", id)
+	var resp apiResponse[PeopleExtendedRecord]
+	if err := c.doGet(ctx, path, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
 // GetSeriesExtended fetches the extended record for a series.
 func (c *Client) GetSeriesExtended(ctx context.Context, id int) (*SeriesExtendedRecord, error) {
 	path := fmt.Sprintf("/series/%d/extended", id)

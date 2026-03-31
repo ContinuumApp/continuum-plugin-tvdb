@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/ContinuumApp/continuum-plugin-tvdb/metadata"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -82,6 +83,34 @@ func TestRuntimeServerConfigure_RequiresTVDBCredentials(t *testing.T) {
 	_, err = server.providerForRequest()
 	if status.Code(err) != codes.FailedPrecondition {
 		t.Fatalf("providerForRequest() error code = %v, want %v", status.Code(err), codes.FailedPrecondition)
+	}
+}
+
+func TestPersonDetailRecordFromResult_CanonicalizesPhotoPath(t *testing.T) {
+	record, err := personDetailRecordFromResult(&metadata.PersonDetailResult{
+		Name:           "Sigourney Weaver",
+		SortName:       "Weaver, Sigourney",
+		Bio:            "English biography",
+		BirthDate:      "1949-10-08",
+		Birthplace:     "New York City, New York, USA",
+		PhotoPath:      "https://artworks.thetvdb.com/banners/persons/321.jpg",
+		PhotoThumbhash: "thumbhash-123",
+		ProviderIDs: map[string]string{
+			"tvdb": "321",
+			"imdb": "nm0000244",
+		},
+	})
+	if err != nil {
+		t.Fatalf("personDetailRecordFromResult() error = %v", err)
+	}
+	if record.GetPhotoPath() != "tvdb://banners/persons/321.jpg" {
+		t.Fatalf("record.PhotoPath = %q, want tvdb canonical path", record.GetPhotoPath())
+	}
+	if record.GetPhotoThumbhash() != "thumbhash-123" {
+		t.Fatalf("record.PhotoThumbhash = %q, want thumbhash-123", record.GetPhotoThumbhash())
+	}
+	if record.GetProviderIds().AsMap()["tvdb"] != "321" {
+		t.Fatalf("record.ProviderIds[tvdb] = %#v", record.GetProviderIds().AsMap()["tvdb"])
 	}
 }
 
