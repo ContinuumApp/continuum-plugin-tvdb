@@ -1,6 +1,6 @@
 {
   "plugin_id": "continuum.tvdb",
-  "version": "1.2.11",
+  "version": "1.2.12",
   "checksum": "__CHECKSUM__",
   "continuum_api_version": "v1",
   "supported_platforms": [
