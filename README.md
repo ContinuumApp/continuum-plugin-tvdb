@@ -15,6 +15,14 @@ go test ./...
 go build .
 ```
 
+## Attribution
+
+Metadata provided by [TheTVDB](https://thetvdb.com/). Please consider [adding missing information](https://thetvdb.com/) or [subscribing](https://thetvdb.com/subscribe).
+
+<a href="https://thetvdb.com/">
+  <img src="https://thetvdb.com/images/attribution/logo1.png" alt="TheTVDB Logo" width="200">
+</a>
+
 ## License
 
 `continuum-plugin-tvdb` is licensed under `AGPL-3.0-or-later`. See [LICENSE](LICENSE).
