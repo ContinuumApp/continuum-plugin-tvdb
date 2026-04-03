@@ -32,35 +32,5 @@
       }
     }
   ],
-  "global_config_schema": [
-    {
-      "key": "connection",
-      "title": "Connection",
-      "description": "TVDB API key and subscriber PIN.",
-      "json_schema": "{\"type\":\"object\",\"properties\":{\"api_key\":{\"type\":\"string\",\"minLength\":1},\"pin\":{\"type\":\"string\",\"minLength\":1}},\"required\":[\"api_key\",\"pin\"],\"additionalProperties\":false}",
-      "admin_form": {
-        "submit_label": "Save credentials",
-        "fields": [
-          {
-            "key": "api_key",
-            "label": "TVDB API Key",
-            "description": "Paste the API key from your TVDB account settings.",
-            "control": "ADMIN_FORM_CONTROL_PASSWORD",
-            "required": true,
-            "secret": true,
-            "placeholder": "Enter TVDB API key"
-          },
-          {
-            "key": "pin",
-            "label": "Subscriber PIN",
-            "description": "Enter the subscriber PIN associated with your TVDB account.",
-            "control": "ADMIN_FORM_CONTROL_PASSWORD",
-            "required": true,
-            "secret": true,
-            "placeholder": "Enter TVDB subscriber PIN"
-          }
-        ]
-      }
-    }
-  ]
+  "global_config_schema": []
 }

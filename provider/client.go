@@ -18,6 +18,7 @@ import (
 
 const (
 	defaultBaseURL  = "https://api4.thetvdb.com/v4"
+	defaultAPIKey   = "9bad61f9-16d5-468d-9c98-4c4038c13706"
 	maxRetries      = 3
 	maxResponseBody = 2 << 20 // 2 MB
 )
@@ -26,7 +27,6 @@ const (
 type Client struct {
 	httpClient *http.Client
 	apiKey     string
-	pin        string // Subscriber pin (empty string for project-level keys)
 	baseURL    string
 	token      string       // Bearer token from /login
 	tokenMu    sync.RWMutex // protects token read/write
@@ -34,16 +34,15 @@ type Client struct {
 	limiter    *rate.Limiter
 }
 
-// NewClient creates a TVDB API client with the given API key, subscriber pin,
-// and rate limit (requests per second). Pass an empty pin for project-level keys.
-func NewClient(apiKey, pin string, rateLimit int) *Client {
+// NewClient creates a TVDB API client with the given rate limit (requests per
+// second). It uses the built-in project API key.
+func NewClient(rateLimit int) *Client {
 	if rateLimit <= 0 {
 		rateLimit = 50
 	}
 	return &Client{
 		httpClient: &http.Client{Timeout: 30 * time.Second},
-		apiKey:     apiKey,
-		pin:        pin,
+		apiKey:     defaultAPIKey,
 		baseURL:    defaultBaseURL,
 		limiter:    rate.NewLimiter(rate.Limit(rateLimit), rateLimit),
 	}
@@ -60,7 +59,7 @@ func (c *Client) SetBaseURL(url string) {
 
 // authenticate posts to /login with the API key and stores the bearer token.
 func (c *Client) authenticate(ctx context.Context) error {
-	body, err := json.Marshal(map[string]string{"apikey": c.apiKey, "pin": c.pin})
+	body, err := json.Marshal(map[string]string{"apikey": c.apiKey})
 	if err != nil {
 		return fmt.Errorf("tvdb: marshal login body: %w", err)
 	}

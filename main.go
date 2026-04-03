@@ -8,10 +8,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
@@ -54,18 +51,10 @@ func tvdbThumbnailURL(imageURL string) string {
 	return imageURL[:dotIdx] + "_t" + imageURL[dotIdx:]
 }
 
-type connectionConfig struct {
-	APIKey string
-	PIN    string
-}
-
 type runtimeServer struct {
 	pluginv1.UnimplementedRuntimeServer
 
 	manifest *pluginv1.PluginManifest
-
-	mu       sync.RWMutex
-	config   connectionConfig
 	provider *provider.Provider
 }
 
@@ -81,41 +70,11 @@ func (s *runtimeServer) GetManifest(context.Context, *pluginv1.GetManifestReques
 	return &pluginv1.GetManifestResponse{Manifest: s.manifest}, nil
 }
 
-func (s *runtimeServer) Configure(_ context.Context, req *pluginv1.ConfigureRequest) (*pluginv1.ConfigureResponse, error) {
-	config := connectionConfig{}
-	for _, entry := range req.GetConfig() {
-		if entry == nil || entry.GetKey() != "connection" {
-			continue
-		}
-		values := entry.GetValue().AsMap()
-		if rawAPIKey, ok := values["api_key"].(string); ok {
-			config.APIKey = strings.TrimSpace(rawAPIKey)
-		}
-		if rawPIN, ok := values["pin"].(string); ok {
-			config.PIN = strings.TrimSpace(rawPIN)
-		}
-	}
-
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	s.config = config
-	if config.APIKey == "" || config.PIN == "" {
-		s.provider = nil
-		return &pluginv1.ConfigureResponse{}, nil
-	}
-
-	s.provider = provider.NewProvider(config.APIKey, config.PIN)
+func (s *runtimeServer) Configure(_ context.Context, _ *pluginv1.ConfigureRequest) (*pluginv1.ConfigureResponse, error) {
 	return &pluginv1.ConfigureResponse{}, nil
 }
 
 func (s *runtimeServer) providerForRequest() (*provider.Provider, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	if s.provider == nil {
-		return nil, status.Error(codes.FailedPrecondition, "TVDB plugin is not configured")
-	}
 	return s.provider, nil
 }
 
@@ -322,7 +281,10 @@ func main() {
 		panic(err)
 	}
 
-	rs := &runtimeServer{manifest: manifest}
+	rs := &runtimeServer{
+		manifest: manifest,
+		provider: provider.NewProvider(),
+	}
 
 	runtime.Serve(runtime.ServeConfig{
 		Servers: runtime.CapabilityServers{

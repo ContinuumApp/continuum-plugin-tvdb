@@ -58,7 +58,7 @@ func TestGetImagesReturnsArtworkImageURLs(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient("test-key", "test-pin", 1000)
+	client := NewClient(1000)
 	client.SetBaseURL(server.URL)
 	p := NewProviderWithClient(client)
 

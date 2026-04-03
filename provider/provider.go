@@ -18,9 +18,9 @@ type Provider struct {
 	client *Client
 }
 
-// NewProvider creates a TVDB provider with the given API key and subscriber pin.
-func NewProvider(apiKey, pin string) *Provider {
-	return &Provider{client: NewClient(apiKey, pin, 10)}
+// NewProvider creates a TVDB provider using the built-in project API key.
+func NewProvider() *Provider {
+	return &Provider{client: NewClient(10)}
 }
 
 // NewProviderWithClient creates a TVDB provider with a pre-configured client.
