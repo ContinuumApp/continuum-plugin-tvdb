@@ -244,6 +244,10 @@ func (p *Provider) getMovieMetadata(ctx context.Context, id int) (*metadata.Meta
 		result.Countries = []string{movie.OriginalCountry}
 	}
 
+	// Carry the top-level image so it's available even when the artworks
+	// sub-response is empty (common for obscure or new titles).
+	result.PosterPath = movie.Image
+
 	result.People = convertCharacters(movie.Characters)
 
 	return result, nil
@@ -286,6 +290,10 @@ func (p *Provider) getSeriesMetadata(ctx context.Context, id int) (*metadata.Met
 	if series.OriginalCountry != "" {
 		result.Countries = []string{series.OriginalCountry}
 	}
+
+	// Carry the top-level image so it's available even when the artworks
+	// sub-response is empty (common for obscure or new titles).
+	result.PosterPath = series.Image
 
 	result.People = convertCharacters(series.Characters)
 

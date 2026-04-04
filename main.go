@@ -109,7 +109,7 @@ func (s *metadataServer) Search(ctx context.Context, req *pluginv1.SearchMetadat
 			Year:          int32(result.Year),
 			Overview:      result.Overview,
 			ProviderIds:   providerIDs,
-			ImageUrl:      result.ImageURL,
+			ImageUrl:      tvdbCanonicalPath(result.ImageURL),
 			OriginalTitle: "",
 		})
 	}
