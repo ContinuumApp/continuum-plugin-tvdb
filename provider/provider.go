@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 
@@ -162,9 +163,9 @@ func (p *Provider) GetMetadata(ctx context.Context, req metadata.MetadataRequest
 	}
 	switch req.ContentType {
 	case "movie":
-		return p.getMovieMetadata(ctx, id)
+		return p.getMovieMetadata(ctx, id, req.Language)
 	case "series":
-		return p.getSeriesMetadata(ctx, id)
+		return p.getSeriesMetadata(ctx, id, req.Language)
 	}
 	return nil, nil
 }
@@ -211,17 +212,33 @@ func (p *Provider) GetPersonDetail(ctx context.Context, req metadata.PersonDetai
 	}, nil
 }
 
-func (p *Provider) getMovieMetadata(ctx context.Context, id int) (*metadata.MetadataResult, error) {
+func (p *Provider) getMovieMetadata(ctx context.Context, id int, lang string) (*metadata.MetadataResult, error) {
 	movie, err := p.client.GetMovieExtended(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
+	title := movie.Name
+	overview := findTranslationOverview(movie.Translations, lang)
+	if !isEnglish(lang) {
+		tr, err := p.client.GetMovieTranslation(ctx, id, toLang3(lang))
+		if err != nil {
+			slog.Warn("tvdb: movie translation fetch failed", "movie_id", id, "lang", lang, "error", err)
+		} else if tr != nil {
+			if tr.Overview != "" && overview == "" {
+				overview = tr.Overview
+			}
+			if tr.Name != "" {
+				title = tr.Name
+			}
+		}
+	}
+
 	result := &metadata.MetadataResult{
 		HasMetadata:      true,
-		Title:            movie.Name,
+		Title:            title,
 		OriginalLanguage: metadata.NormalizeOriginalLanguage(movie.OriginalLanguage),
-		Overview:         findEnglishOverview(movie.Translations),
+		Overview:         overview,
 		Runtime:          movie.Runtime,
 		Year:             extractYear(movie.Year),
 		ContentRating:    findContentRating(movie.ContentRatings),
@@ -253,7 +270,7 @@ func (p *Provider) getMovieMetadata(ctx context.Context, id int) (*metadata.Meta
 	return result, nil
 }
 
-func (p *Provider) getSeriesMetadata(ctx context.Context, id int) (*metadata.MetadataResult, error) {
+func (p *Provider) getSeriesMetadata(ctx context.Context, id int, lang string) (*metadata.MetadataResult, error) {
 	series, err := p.client.GetSeriesExtended(ctx, id)
 	if err != nil {
 		return nil, err
@@ -266,11 +283,27 @@ func (p *Provider) getSeriesMetadata(ctx context.Context, id int) (*metadata.Met
 		}
 	}
 
+	title := series.Name
+	overview := series.Overview
+	if !isEnglish(lang) {
+		tr, err := p.client.GetSeriesTranslation(ctx, id, toLang3(lang))
+		if err != nil {
+			slog.Warn("tvdb: series translation fetch failed", "series_id", id, "lang", lang, "error", err)
+		} else if tr != nil {
+			if tr.Overview != "" {
+				overview = tr.Overview
+			}
+			if tr.Name != "" {
+				title = tr.Name
+			}
+		}
+	}
+
 	result := &metadata.MetadataResult{
 		HasMetadata:      true,
-		Title:            series.Name,
+		Title:            title,
 		OriginalLanguage: metadata.NormalizeOriginalLanguage(series.OriginalLanguage),
-		Overview:         series.Overview,
+		Overview:         overview,
 		Year:             extractYear(series.Year),
 		ContentRating:    findContentRating(series.ContentRatings),
 		SeasonCount:      officialCount,
@@ -367,15 +400,28 @@ func (p *Provider) GetSeasons(ctx context.Context, req metadata.SeasonsRequest) 
 		return nil, err
 	}
 
+	fetchTranslations := req.Language != "" && !isEnglish(req.Language)
+	lang3 := toLang3(req.Language)
+
 	var seasons []metadata.SeasonResult
 	for _, s := range series.Seasons {
 		if s.Type.ID != 1 {
 			continue
 		}
-		seasons = append(seasons, metadata.SeasonResult{
+		sr := metadata.SeasonResult{
 			SeasonNumber: s.Number,
 			PosterPath:   s.Image,
-		})
+		}
+		if fetchTranslations {
+			tr, err := p.client.GetSeasonTranslation(ctx, s.ID, lang3)
+			if err != nil {
+				slog.Warn("tvdb: season translation fetch failed", "season_id", s.ID, "lang", lang3, "error", err)
+			} else if tr != nil {
+				sr.Title = tr.Name
+				sr.Overview = tr.Overview
+			}
+		}
+		seasons = append(seasons, sr)
 	}
 	return seasons, nil
 }
@@ -443,17 +489,24 @@ func extractYear(yearStr string) int {
 	return y
 }
 
-func findEnglishOverview(td *TranslationData) string {
+// findTranslationOverview selects an overview translation matching the
+// requested language. Fallback order: requested → primary → first non-empty.
+func findTranslationOverview(td *TranslationData, lang string) string {
 	if td == nil {
 		return ""
 	}
 	for _, t := range td.OverviewTranslations {
-		if t.Language == "eng" {
+		if t.Overview != "" && languageMatches(lang, t.Language) {
 			return t.Overview
 		}
 	}
 	for _, t := range td.OverviewTranslations {
-		if t.IsPrimary {
+		if t.IsPrimary && t.Overview != "" {
+			return t.Overview
+		}
+	}
+	for _, t := range td.OverviewTranslations {
+		if t.Overview != "" {
 			return t.Overview
 		}
 	}

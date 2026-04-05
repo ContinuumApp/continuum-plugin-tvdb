@@ -12,6 +12,7 @@ type SearchQuery struct {
 	Year        int
 	ContentType string
 	ProviderIDs map[string]string
+	Language    string // ISO 639-1 code from library preference
 }
 
 // SearchResult is returned from SearchProvider.Search().
@@ -120,12 +121,14 @@ const (
 type SeasonsRequest struct {
 	ProviderIDs map[string]string
 	ContentType string
+	Language    string
 }
 
 // EpisodesRequest is passed to EpisodeProvider.GetEpisodes().
 type EpisodesRequest struct {
 	ProviderIDs  map[string]string
 	SeasonNumber int
+	Language     string
 }
 
 // SeasonResult carries season data from a provider.

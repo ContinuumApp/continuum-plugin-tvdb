@@ -385,6 +385,15 @@ type Translation struct {
 	IsPrimary bool   `json:"isPrimary"`
 }
 
+// TranslationRecord is returned by the per-language translation endpoints
+// (/series/{id}/translations/{language}, /movies/{id}/translations/{language}, etc.).
+type TranslationRecord struct {
+	Name     string `json:"name"`
+	Overview string `json:"overview"`
+	Tagline  string `json:"tagline"`
+	Language string `json:"language"`
+}
+
 // ---------------------------------------------------------------------------
 // API error response
 // ---------------------------------------------------------------------------

@@ -324,3 +324,34 @@ func (c *Client) GetSeasonExtended(ctx context.Context, id int) (*SeasonExtended
 	}
 	return &resp.Data, nil
 }
+
+// GetSeriesTranslation fetches a single-language translation for a series.
+// lang3 must be a 3-letter ISO 639-2 code (e.g. "jpn", "fra").
+func (c *Client) GetSeriesTranslation(ctx context.Context, id int, lang3 string) (*TranslationRecord, error) {
+	path := fmt.Sprintf("/series/%d/translations/%s", id, url.PathEscape(lang3))
+	var resp apiResponse[TranslationRecord]
+	if err := c.doGet(ctx, path, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// GetMovieTranslation fetches a single-language translation for a movie.
+func (c *Client) GetMovieTranslation(ctx context.Context, id int, lang3 string) (*TranslationRecord, error) {
+	path := fmt.Sprintf("/movies/%d/translations/%s", id, url.PathEscape(lang3))
+	var resp apiResponse[TranslationRecord]
+	if err := c.doGet(ctx, path, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// GetSeasonTranslation fetches a single-language translation for a season.
+func (c *Client) GetSeasonTranslation(ctx context.Context, id int, lang3 string) (*TranslationRecord, error) {
+	path := fmt.Sprintf("/seasons/%d/translations/%s", id, url.PathEscape(lang3))
+	var resp apiResponse[TranslationRecord]
+	if err := c.doGet(ctx, path, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
