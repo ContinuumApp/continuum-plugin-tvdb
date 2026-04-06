@@ -85,3 +85,161 @@ func TestGetImagesReturnsArtworkImageURLs(t *testing.T) {
 		t.Fatalf("backdrop URL = %q", got[metadata.ImageBackdrop])
 	}
 }
+
+func TestGetImagesPrefersTVDBPrimaryPoster(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/login":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status": "success",
+				"data": map[string]any{
+					"token": "test-token",
+				},
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/series/99/extended":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status": "success",
+				"data": map[string]any{
+					"id":    99,
+					"name":  "Series",
+					"image": "https://artworks.example/poster-primary.jpg",
+					"artworks": []map[string]any{
+						{
+							"id":       1,
+							"type":     2,
+							"image":    "https://artworks.example/poster-primary.jpg",
+							"language": "eng",
+							"width":    2000,
+							"height":   3000,
+							"score":    10,
+						},
+						{
+							"id":       2,
+							"type":     2,
+							"image":    "https://artworks.example/poster-textless.jpg",
+							"language": "",
+							"width":    2000,
+							"height":   3000,
+							"score":    11,
+						},
+					},
+				},
+			})
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(1000)
+	client.SetBaseURL(server.URL)
+	p := NewProviderWithClient(client)
+
+	images, err := p.GetImages(context.Background(), metadata.ImageRequest{
+		ProviderIDs: map[string]string{"tvdb": "99"},
+		ContentType: "series",
+	})
+	if err != nil {
+		t.Fatalf("GetImages() error = %v", err)
+	}
+
+	var primary, textless *metadata.RemoteImage
+	for i := range images {
+		switch images[i].URL {
+		case "https://artworks.example/poster-primary.jpg":
+			primary = &images[i]
+		case "https://artworks.example/poster-textless.jpg":
+			textless = &images[i]
+		}
+	}
+
+	if primary == nil {
+		t.Fatal("primary poster missing from GetImages() result")
+	}
+	if textless == nil {
+		t.Fatal("alternate poster missing from GetImages() result")
+	}
+	if primary.Language != "en" {
+		t.Fatalf("primary language = %q, want en", primary.Language)
+	}
+	if primary.Rating <= textless.Rating {
+		t.Fatalf("primary rating = %v, textless rating = %v; want primary > textless", primary.Rating, textless.Rating)
+	}
+}
+
+func TestGetImagesAddsPrimaryPosterWhenArtworkListMissesIt(t *testing.T) {
+	t.Parallel()
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/login":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status": "success",
+				"data": map[string]any{
+					"token": "test-token",
+				},
+			})
+		case r.Method == http.MethodGet && r.URL.Path == "/series/99/extended":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"status": "success",
+				"data": map[string]any{
+					"id":    99,
+					"name":  "Series",
+					"image": "https://artworks.example/poster-primary.jpg",
+					"artworks": []map[string]any{
+						{
+							"id":       2,
+							"type":     2,
+							"image":    "https://artworks.example/poster-alt.jpg",
+							"language": "",
+							"width":    2000,
+							"height":   3000,
+							"score":    11,
+						},
+					},
+				},
+			})
+		default:
+			t.Fatalf("unexpected request: %s %s", r.Method, r.URL.String())
+		}
+	}))
+	defer server.Close()
+
+	client := NewClient(1000)
+	client.SetBaseURL(server.URL)
+	p := NewProviderWithClient(client)
+
+	images, err := p.GetImages(context.Background(), metadata.ImageRequest{
+		ProviderIDs: map[string]string{"tvdb": "99"},
+		ContentType: "series",
+	})
+	if err != nil {
+		t.Fatalf("GetImages() error = %v", err)
+	}
+
+	var primary, alt *metadata.RemoteImage
+	for i := range images {
+		switch images[i].URL {
+		case "https://artworks.example/poster-primary.jpg":
+			primary = &images[i]
+		case "https://artworks.example/poster-alt.jpg":
+			alt = &images[i]
+		}
+	}
+
+	if primary == nil {
+		t.Fatal("primary poster was not appended to GetImages() result")
+	}
+	if alt == nil {
+		t.Fatal("alternate poster missing from GetImages() result")
+	}
+	if primary.Rating <= alt.Rating {
+		t.Fatalf("primary rating = %v, alt rating = %v; want primary > alt", primary.Rating, alt.Rating)
+	}
+}

@@ -34,3 +34,19 @@ func toLang3(lang string) string {
 func isEnglish(lang string) bool {
 	return toLang3(lang) == "eng"
 }
+
+// toLang1 converts a TVDB language tag into the ISO 639-1 two-letter form the
+// host selector expects for exact language matching. Unknown three-letter codes
+// fall back to the normalized input.
+func toLang1(lang string) string {
+	norm := normalizeLanguageTag(lang)
+	if norm == "" || len(norm) == 2 {
+		return norm
+	}
+	for code2, code3 := range iso639_1To2 {
+		if code3 == norm {
+			return code2
+		}
+	}
+	return norm
+}

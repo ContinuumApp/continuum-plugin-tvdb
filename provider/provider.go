@@ -348,6 +348,7 @@ func (p *Provider) GetImages(ctx context.Context, req metadata.ImageRequest) ([]
 	}
 
 	var artworks []ArtworkRecord
+	primaryPosterURL := ""
 	switch req.ContentType {
 	case "movie":
 		movie, err := p.client.GetMovieExtended(ctx, id)
@@ -355,12 +356,14 @@ func (p *Provider) GetImages(ctx context.Context, req metadata.ImageRequest) ([]
 			return nil, err
 		}
 		artworks = movie.Artworks
+		primaryPosterURL = movie.Image
 	case "series":
 		series, err := p.client.GetSeriesExtended(ctx, id)
 		if err != nil {
 			return nil, err
 		}
 		artworks = series.Artworks
+		primaryPosterURL = series.Image
 	}
 
 	var out []metadata.RemoteImage
@@ -372,13 +375,13 @@ func (p *Provider) GetImages(ctx context.Context, req metadata.ImageRequest) ([]
 		out = append(out, metadata.RemoteImage{
 			URL:      a.Image,
 			Type:     imgType,
-			Language: a.Language,
+			Language: toLang1(a.Language),
 			Width:    a.Width,
 			Height:   a.Height,
 			Rating:   float64(a.Score),
 		})
 	}
-	return out, nil
+	return preferPrimaryImage(out, metadata.ImagePoster, primaryPosterURL, ""), nil
 }
 
 // ---------------------------------------------------------------------------
@@ -605,6 +608,46 @@ func artworkTypeToImageType(artType int) (metadata.ImageType, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func preferPrimaryImage(
+	images []metadata.RemoteImage,
+	imageType metadata.ImageType,
+	primaryURL, language string,
+) []metadata.RemoteImage {
+	primaryURL = strings.TrimSpace(primaryURL)
+	if primaryURL == "" {
+		return images
+	}
+
+	bestRating := 0.0
+	primaryIdx := -1
+	for i, img := range images {
+		if img.Type != imageType {
+			continue
+		}
+		if img.Rating > bestRating {
+			bestRating = img.Rating
+		}
+		if img.URL == primaryURL {
+			primaryIdx = i
+		}
+	}
+
+	if primaryIdx >= 0 {
+		images[primaryIdx].Rating = bestRating + 1
+		if images[primaryIdx].Language == "" && language != "" {
+			images[primaryIdx].Language = language
+		}
+		return images
+	}
+
+	return append(images, metadata.RemoteImage{
+		URL:      primaryURL,
+		Type:     imageType,
+		Language: language,
+		Rating:   bestRating + 1,
+	})
 }
 
 func findBiography(biographies []Biography, requestedLanguage string) string {
