@@ -60,6 +60,7 @@ type MetadataResult struct {
 	SeasonCount       int
 	FirstAirDate      string
 	LastAirDate       string
+	AirTime           string
 }
 
 // PersonDetailRequest is passed to person detail lookups.

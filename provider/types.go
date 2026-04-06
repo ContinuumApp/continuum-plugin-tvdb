@@ -108,6 +108,7 @@ type SeriesExtendedRecord struct {
 	Trailers        []Trailer          `json:"trailers"`
 	LatestNetwork   *NetworkRecord     `json:"latestNetwork"`
 	OriginalNetwork *NetworkRecord     `json:"originalNetwork"`
+	AirsTime        string             `json:"airsTime"`
 }
 
 // ---------------------------------------------------------------------------

@@ -351,6 +351,7 @@ func metadataItemFromResult(result *metadata.MetadataResult, itemType string) (*
 		SeasonCount:       int32(result.SeasonCount),
 		FirstAirDate:      result.FirstAirDate,
 		LastAirDate:       result.LastAirDate,
+		AirTime:           result.AirTime,
 		People:            peopleToRecords(result.People),
 	}, nil
 }
