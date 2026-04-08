@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/sync/errgroup"
+
 	"github.com/ContinuumApp/continuum-plugin-tvdb/metadata"
 	"github.com/ContinuumApp/continuum-plugin-tvdb/models"
 )
@@ -220,16 +222,23 @@ func (p *Provider) getMovieMetadata(ctx context.Context, id int, lang string) (*
 
 	title := movie.Name
 	overview := findTranslationOverview(movie.Translations, lang)
-	if !isEnglish(lang) {
-		tr, err := p.client.GetMovieTranslation(ctx, id, toLang3(lang))
-		if err != nil {
-			slog.Warn("tvdb: movie translation fetch failed", "movie_id", id, "lang", lang, "error", err)
-		} else if tr != nil {
-			if tr.Overview != "" && overview == "" {
-				overview = tr.Overview
-			}
-			if tr.Name != "" {
-				title = tr.Name
+	if needsTranslation(lang, movie.OriginalLanguage) {
+		// Try embedded translations first (movie endpoint includes ?meta=translations).
+		if name := findTranslationName(movie.Translations, lang); name != "" {
+			title = name
+		}
+		// Fall back to dedicated translation endpoint for any missing fields.
+		if title == movie.Name || overview == "" {
+			tr, err := p.client.GetMovieTranslation(ctx, id, toLang3(lang))
+			if err != nil {
+				slog.Warn("tvdb: movie translation fetch failed", "movie_id", id, "lang", lang, "error", err)
+			} else if tr != nil {
+				if tr.Overview != "" && overview == "" {
+					overview = tr.Overview
+				}
+				if tr.Name != "" && title == movie.Name {
+					title = tr.Name
+				}
 			}
 		}
 	}
@@ -285,16 +294,26 @@ func (p *Provider) getSeriesMetadata(ctx context.Context, id int, lang string) (
 
 	title := series.Name
 	overview := series.Overview
-	if !isEnglish(lang) {
-		tr, err := p.client.GetSeriesTranslation(ctx, id, toLang3(lang))
-		if err != nil {
-			slog.Warn("tvdb: series translation fetch failed", "series_id", id, "lang", lang, "error", err)
-		} else if tr != nil {
-			if tr.Overview != "" {
-				overview = tr.Overview
-			}
-			if tr.Name != "" {
-				title = tr.Name
+	if needsTranslation(lang, series.OriginalLanguage) {
+		// Try embedded translations first (series endpoint now includes ?meta=translations).
+		if name := findTranslationName(series.Translations, lang); name != "" {
+			title = name
+		}
+		if ov := findTranslationOverview(series.Translations, lang); ov != "" {
+			overview = ov
+		}
+		// Fall back to dedicated translation endpoint for any missing fields.
+		if title == series.Name || overview == series.Overview {
+			tr, err := p.client.GetSeriesTranslation(ctx, id, toLang3(lang))
+			if err != nil {
+				slog.Warn("tvdb: series translation fetch failed", "series_id", id, "lang", lang, "error", err)
+			} else if tr != nil {
+				if tr.Name != "" && title == series.Name {
+					title = tr.Name
+				}
+				if tr.Overview != "" && overview == series.Overview {
+					overview = tr.Overview
+				}
 			}
 		}
 	}
@@ -404,29 +423,50 @@ func (p *Provider) GetSeasons(ctx context.Context, req metadata.SeasonsRequest) 
 		return nil, err
 	}
 
-	fetchTranslations := req.Language != "" && !isEnglish(req.Language)
-	lang3 := toLang3(req.Language)
-
-	var seasons []metadata.SeasonResult
+	// Filter to official seasons.
+	var officialSeasons []SeasonBaseRecord
 	for _, s := range series.Seasons {
-		if s.Type.ID != 1 {
-			continue
+		if s.Type.ID == 1 {
+			officialSeasons = append(officialSeasons, s)
 		}
-		sr := metadata.SeasonResult{
+	}
+
+	seasons := make([]metadata.SeasonResult, len(officialSeasons))
+	for i, s := range officialSeasons {
+		seasons[i] = metadata.SeasonResult{
 			SeasonNumber: s.Number,
 			PosterPath:   s.Image,
 		}
-		if fetchTranslations {
-			tr, err := p.client.GetSeasonTranslation(ctx, s.ID, lang3)
-			if err != nil {
-				slog.Warn("tvdb: season translation fetch failed", "season_id", s.ID, "lang", lang3, "error", err)
-			} else if tr != nil {
-				sr.Title = tr.Name
-				sr.Overview = tr.Overview
-			}
-		}
-		seasons = append(seasons, sr)
 	}
+
+	if needsTranslation(req.Language, series.OriginalLanguage) {
+		lang3 := toLang3(req.Language)
+		g, gctx := errgroup.WithContext(ctx)
+		g.SetLimit(5)
+
+		for i, s := range officialSeasons {
+			g.Go(func() error {
+				tr, err := p.client.GetSeasonTranslation(gctx, s.ID, lang3)
+				if err != nil {
+					if gctx.Err() != nil {
+						return gctx.Err()
+					}
+					slog.Warn("tvdb: season translation fetch failed", "season_id", s.ID, "lang", lang3, "error", err)
+					return nil
+				}
+				if tr != nil {
+					seasons[i].Title = tr.Name
+					seasons[i].Overview = tr.Overview
+				}
+				return nil
+			})
+		}
+
+		if err := g.Wait(); err != nil {
+			return nil, err
+		}
+	}
+
 	return seasons, nil
 }
 
@@ -462,9 +502,10 @@ func (p *Provider) GetEpisodes(ctx context.Context, req metadata.EpisodesRequest
 		return nil, err
 	}
 
-	var episodes []metadata.EpisodeResult
-	for _, ep := range season.Episodes {
-		episodes = append(episodes, metadata.EpisodeResult{
+	// Pre-allocate results; each goroutine writes to its own index.
+	episodes := make([]metadata.EpisodeResult, len(season.Episodes))
+	for i, ep := range season.Episodes {
+		episodes[i] = metadata.EpisodeResult{
 			ProviderIDs:   map[string]string{"tvdb": strconv.Itoa(ep.ID)},
 			SeasonNumber:  ep.SeasonNumber,
 			EpisodeNumber: ep.Number,
@@ -473,8 +514,42 @@ func (p *Provider) GetEpisodes(ctx context.Context, req metadata.EpisodesRequest
 			Runtime:       ep.Runtime,
 			AirDate:       ep.Aired,
 			StillPath:     ep.Image,
-		})
+		}
 	}
+
+	if needsTranslation(req.Language, series.OriginalLanguage) {
+		lang3 := toLang3(req.Language)
+		g, gctx := errgroup.WithContext(ctx)
+		g.SetLimit(5)
+
+		for i, ep := range season.Episodes {
+			g.Go(func() error {
+				tr, err := p.client.GetEpisodeTranslation(gctx, ep.ID, lang3)
+				if err != nil {
+					if gctx.Err() != nil {
+						return gctx.Err()
+					}
+					slog.Warn("tvdb: episode translation fetch failed",
+						"episode_id", ep.ID, "lang", lang3, "error", err)
+					return nil
+				}
+				if tr != nil {
+					if tr.Name != "" {
+						episodes[i].Title = tr.Name
+					}
+					if tr.Overview != "" {
+						episodes[i].Overview = tr.Overview
+					}
+				}
+				return nil
+			})
+		}
+
+		if err := g.Wait(); err != nil {
+			return nil, err
+		}
+	}
+
 	return episodes, nil
 }
 
@@ -491,6 +566,20 @@ func extractYear(yearStr string) int {
 		return 0
 	}
 	return y
+}
+
+// findTranslationName selects a name translation matching the requested
+// language from embedded translation data.
+func findTranslationName(td *TranslationData, lang string) string {
+	if td == nil {
+		return ""
+	}
+	for _, t := range td.NameTranslations {
+		if t.Name != "" && languageMatches(lang, t.Language) {
+			return t.Name
+		}
+	}
+	return ""
 }
 
 // findTranslationOverview selects an overview translation matching the

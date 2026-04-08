@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/ContinuumApp/continuum-plugin-sdk v0.3.6
+	golang.org/x/sync v0.20.0
 	golang.org/x/time v0.14.0
 	google.golang.org/protobuf v1.36.11
 )

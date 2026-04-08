@@ -106,6 +106,7 @@ type SeriesExtendedRecord struct {
 	SeasonTypes     []SeasonType       `json:"seasonTypes"`
 	Tags            []TagOption        `json:"tags"`
 	Trailers        []Trailer          `json:"trailers"`
+	Translations    *TranslationData   `json:"translations"`
 	LatestNetwork   *NetworkRecord     `json:"latestNetwork"`
 	OriginalNetwork *NetworkRecord     `json:"originalNetwork"`
 	AirsTime        string             `json:"airsTime"`
@@ -175,9 +176,10 @@ type SeasonBaseRecord struct {
 // SeasonExtendedRecord is returned by GET /seasons/{id}/extended.
 type SeasonExtendedRecord struct {
 	SeasonBaseRecord
-	Artwork  []ArtworkRecord     `json:"artwork"`
-	Episodes []EpisodeBaseRecord `json:"episodes"`
-	Trailers []Trailer           `json:"trailers"`
+	Artwork      []ArtworkRecord     `json:"artwork"`
+	Episodes     []EpisodeBaseRecord `json:"episodes"`
+	Trailers     []Trailer           `json:"trailers"`
+	Translations *TranslationData    `json:"translations"`
 }
 
 // ---------------------------------------------------------------------------

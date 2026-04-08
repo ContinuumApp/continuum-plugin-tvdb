@@ -30,9 +30,20 @@ func toLang3(lang string) string {
 	return "eng"
 }
 
-// isEnglish returns true if the language resolves to English.
-func isEnglish(lang string) bool {
-	return toLang3(lang) == "eng"
+// needsTranslation returns true if the requested language differs from the
+// record's original language, meaning translations should be fetched.
+// Returns false if requestedLang is empty (no preference set).
+// Returns true if originalLang is empty (unknown original, fetch to be safe).
+// Both inputs are normalized to 3-letter codes for reliable comparison
+// (e.g. "ja" and "jpn" correctly resolve to the same language).
+func needsTranslation(requestedLang, originalLang string) bool {
+	if requestedLang == "" {
+		return false
+	}
+	if originalLang == "" {
+		return true
+	}
+	return toLang3(requestedLang) != toLang3(originalLang)
 }
 
 // toLang1 converts a TVDB language tag into the ISO 639-1 two-letter form the

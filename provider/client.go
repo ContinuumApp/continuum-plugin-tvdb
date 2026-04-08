@@ -293,9 +293,10 @@ func (c *Client) GetPersonExtended(ctx context.Context, id int) (*PeopleExtended
 	return &resp.Data, nil
 }
 
-// GetSeriesExtended fetches the extended record for a series.
+// GetSeriesExtended fetches the extended record for a series, including
+// translations (needed to resolve preferred-language titles and overviews).
 func (c *Client) GetSeriesExtended(ctx context.Context, id int) (*SeriesExtendedRecord, error) {
-	path := fmt.Sprintf("/series/%d/extended", id)
+	path := fmt.Sprintf("/series/%d/extended?meta=translations", id)
 	var resp apiResponse[SeriesExtendedRecord]
 	if err := c.doGet(ctx, path, &resp); err != nil {
 		return nil, err
@@ -315,9 +316,9 @@ func (c *Client) GetMovieExtended(ctx context.Context, id int) (*MovieExtendedRe
 }
 
 // GetSeasonExtended fetches the extended record for a season including
-// episodes.
+// episodes and translations.
 func (c *Client) GetSeasonExtended(ctx context.Context, id int) (*SeasonExtendedRecord, error) {
-	path := fmt.Sprintf("/seasons/%d/extended", id)
+	path := fmt.Sprintf("/seasons/%d/extended?meta=translations", id)
 	var resp apiResponse[SeasonExtendedRecord]
 	if err := c.doGet(ctx, path, &resp); err != nil {
 		return nil, err
@@ -349,6 +350,16 @@ func (c *Client) GetMovieTranslation(ctx context.Context, id int, lang3 string) 
 // GetSeasonTranslation fetches a single-language translation for a season.
 func (c *Client) GetSeasonTranslation(ctx context.Context, id int, lang3 string) (*TranslationRecord, error) {
 	path := fmt.Sprintf("/seasons/%d/translations/%s", id, url.PathEscape(lang3))
+	var resp apiResponse[TranslationRecord]
+	if err := c.doGet(ctx, path, &resp); err != nil {
+		return nil, err
+	}
+	return &resp.Data, nil
+}
+
+// GetEpisodeTranslation fetches a single-language translation for an episode.
+func (c *Client) GetEpisodeTranslation(ctx context.Context, id int, lang3 string) (*TranslationRecord, error) {
+	path := fmt.Sprintf("/episodes/%d/translations/%s", id, url.PathEscape(lang3))
 	var resp apiResponse[TranslationRecord]
 	if err := c.doGet(ctx, path, &resp); err != nil {
 		return nil, err
