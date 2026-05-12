@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 
 	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
 	publicmanifest "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginsdk/manifest"
@@ -23,6 +25,7 @@ import (
 var version string
 
 const tvdbArtworksBase = "https://artworks.thetvdb.com/"
+const resolvedImageURLTTL = 24 * time.Hour
 
 func tvdbCanonicalPath(imageURL string) string {
 	if imageURL == "" {
@@ -265,15 +268,24 @@ func (s *metadataServer) GetImages(ctx context.Context, req *pluginv1.GetImagesR
 
 func (s *metadataServer) ResolveImageURL(_ context.Context, req *pluginv1.ResolveImageURLRequest) (*pluginv1.ResolveImageURLResponse, error) {
 	url := resolveOneTVDBPath(req.GetPath(), req.GetVariant())
-	return &pluginv1.ResolveImageURLResponse{Url: url}, nil
+	return &pluginv1.ResolveImageURLResponse{
+		Url:       url,
+		ExpiresAt: timestamppb.New(time.Now().Add(resolvedImageURLTTL)),
+	}, nil
 }
 
 func (s *metadataServer) ResolveImageURLs(_ context.Context, req *pluginv1.ResolveImageURLsRequest) (*pluginv1.ResolveImageURLsResponse, error) {
 	urls := make(map[string]string, len(req.GetPaths()))
+	resolved := make(map[string]*pluginv1.ResolvedImageURL, len(req.GetPaths()))
 	for _, path := range req.GetPaths() {
-		urls[path] = resolveOneTVDBPath(path, req.GetVariant())
+		url := resolveOneTVDBPath(path, req.GetVariant())
+		urls[path] = url
+		resolved[path] = &pluginv1.ResolvedImageURL{
+			Url:       url,
+			ExpiresAt: timestamppb.New(time.Now().Add(resolvedImageURLTTL)),
+		}
 	}
-	return &pluginv1.ResolveImageURLsResponse{Urls: urls}, nil
+	return &pluginv1.ResolveImageURLsResponse{Urls: urls, ResolvedUrls: resolved}, nil
 }
 
 func main() {

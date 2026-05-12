@@ -3,11 +3,20 @@ package main
 import (
 	"context"
 	"testing"
+	"time"
 
+	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
 	"github.com/ContinuumApp/continuum-plugin-tvdb/metadata"
 	"github.com/ContinuumApp/continuum-plugin-tvdb/provider"
-	pluginv1 "github.com/ContinuumApp/continuum-plugin-sdk/pkg/pluginproto/continuum/plugin/v1"
 )
+
+func assertResolvedImageExpiry(t *testing.T, expiresAt time.Time) {
+	t.Helper()
+	ttl := time.Until(expiresAt)
+	if ttl < 23*time.Hour || ttl > 25*time.Hour {
+		t.Fatalf("resolved image expiry TTL = %v, want about 24h", ttl)
+	}
+}
 
 func TestResolveImageURL(t *testing.T) {
 	ms := &metadataServer{}
@@ -32,8 +41,38 @@ func TestResolveImageURL(t *testing.T) {
 			if resp.GetUrl() != tt.want {
 				t.Fatalf("got %q, want %q", resp.GetUrl(), tt.want)
 			}
+			if resp.GetExpiresAt() == nil {
+				t.Fatal("expected expires_at to be set")
+			}
+			assertResolvedImageExpiry(t, resp.GetExpiresAt().AsTime())
 		})
 	}
+}
+
+func TestResolveImageURLsIncludesExpiryAwareMap(t *testing.T) {
+	ms := &metadataServer{}
+	resp, err := ms.ResolveImageURLs(context.Background(), &pluginv1.ResolveImageURLsRequest{
+		Paths:   []string{"banners/posters/81189-10.jpg"},
+		Variant: "card",
+	})
+	if err != nil {
+		t.Fatalf("ResolveImageURLs() error = %v", err)
+	}
+	const wantURL = "https://artworks.thetvdb.com/banners/posters/81189-10_t.jpg"
+	if got := resp.GetUrls()["banners/posters/81189-10.jpg"]; got != wantURL {
+		t.Fatalf("legacy URL = %q, want %q", got, wantURL)
+	}
+	resolved := resp.GetResolvedUrls()["banners/posters/81189-10.jpg"]
+	if resolved == nil {
+		t.Fatal("expected resolved_urls entry")
+	}
+	if got := resolved.GetUrl(); got != wantURL {
+		t.Fatalf("resolved URL = %q, want %q", got, wantURL)
+	}
+	if resolved.GetExpiresAt() == nil {
+		t.Fatal("expected resolved_urls expires_at to be set")
+	}
+	assertResolvedImageExpiry(t, resolved.GetExpiresAt().AsTime())
 }
 
 func TestRuntimeServerConfigure_NoOp(t *testing.T) {
